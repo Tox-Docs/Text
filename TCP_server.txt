@@ -38,7 +38,7 @@ Encrypted packets look like this to outsiders:
 In a TCP stream they would look like:
 [[uint16_t (length of data)][encrypted data]][[uint16_t (length of data)][encrypted data]][[uint16_t (length of data)][encrypted data]]...
 
-Both the client and server us the following which each generated in the handshake and sent to the other and generate the same shared key using them:
+Both the client and server use the following (temp public and private (client and server) connection keys) which are each generated for the connection and then sent to the other in the handshake and sent to the other. They are then used like the next diagram shows to generate a shared key which is equal on both sides.
 
 Client:                                     Server:
 generate_shared_key(                        generate_shared_key(
@@ -49,11 +49,11 @@ generate_shared_key(                        generate_shared_key(
 
 The generated shared key is equal on both sides and is used to encrypt and decrypt the encrypted data packets.
 
-each encrypted data packet sent to the client will be encrypted with the shared key and with a nonce equal to: (client base nonce + number of packets sent where the first packet is nonce + 0, the second is nonce + 1 and so on. Note that nonces like all other numbers sent over the network in toxcore are numbers in big endian format so when increasing them by 1 the least significant byte is the last one)
+each encrypted data packet sent to the client will be encrypted with the shared key and with a nonce equal to: (client base nonce + number of packets sent so for the first packet it is (starting at 0) nonce + 0, the second is nonce + 1 and so on. Note that nonces like all other numbers sent over the network in toxcore are numbers in big endian format so when increasing them by 1 the least significant byte is the last one)
 
-each packet received from the client will be decrypted with the shared key and with a nonce equal to: (server base nonce + number of packets sent where the first packet is nonce + 0, the second is nonce + 1 and so on. Note that nonces like all other numbers sent over the network in toxcore are numbers in big endian format so when increasing them by 1 the least significant byte is the last one)
+each packet received from the client will be decrypted with the shared key and with a nonce equal to: (server base nonce + number of packets sent so for the first packet it is (starting at 0) nonce + 0, the second is nonce + 1 and so on. Note that nonces like all other numbers sent over the network in toxcore are numbers in big endian format so when increasing them by 1 the least significant byte is the last one)
 
-Encrypted packets have a hard maximum size of 2048 in the toxcore TCP server implementation.
+Encrypted packets have a hard maximum size of 2048 in the toxcore TCP server implementation, 2048 is big enough to make sure that all toxcore packets can go through and leaves some extra space just in case.
 
 
 The logic behind the format of the handshake is that we:
