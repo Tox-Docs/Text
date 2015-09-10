@@ -14,21 +14,43 @@ The cookie response must be sent back using the exact same link the cookie reque
 When a cookie request is received, the peer must not use the information in the request packet for anything, he must not store it, he must only create a cookie and cookie response from it, then send the created cookie response packet and forget them. The reason for this is to prevent possible attacks. For example if a peer would allocate long term memory for each cookie request packet received then a simple packet flood would be enough to achieve an effective denial of service attack by making the program run out of memory.
 
 cookie request packet (145 bytes):
-[uint8_t 24][Sender's DHT Public key (32 bytes)][Random nonce (24 bytes)][Encrypted message containing: [Sender's real public key (32 bytes)][padding (32 bytes)][uint64_t number (must be sent back untouched in cookie response)]] Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
+
+[uint8_t 24]
+[Sender's DHT Public key (32 bytes)]
+[Random nonce (24 bytes)]
+[Encrypted message containing:
+    [Sender's real public key (32 bytes)]
+    [padding (32 bytes)]
+    [uint64_t number (must be sent back untouched in cookie response)]
+]
+
+Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
 
 The packet id for cookie request packets is 24. The request contain the DHT public key of the sender which is the key used (The DHT private key) (along with the DHT public key of the receiver) to encrypt the encrypted part of the cookie packet and a nonce also used to encrypt the encrypted part of the packet. Padding used to be used for something else but I left it there because it makes the request packet only 16 bytes smaller that the response which makes it less appealing for use in amplification attacks. The number in the cookie request must be sent back untouched in the cookie response. This number is how the peer sending the request can be sure that the response received was a response to the packet that he sent.
 
 Toxcore currently sends 1 cookie request packet every second 8 times before it kills the connection if there are no responses.
 
 cookie response packet (161 bytes):
-[uint8_t 25][Random nonce (24 bytes)][Encrypted message containing: [Cookie][uint64_t number (that was sent in the request)]] Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
+[uint8_t 25]
+[Random nonce (24 bytes)]
+[Encrypted message containing:
+    [Cookie]
+    [uint64_t number (that was sent in the request)]
+]
+
+Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
 
 The packet id for cookie request packets is 25. The response contains a nonce and an encrypted part encrypted with the nonce. The encrypted part is encrypted with the same key used to decrypt the encrypted part of the request meaning the expensive shared key generation needs to be called only once in order to handle and respond to a cookie request packet with a cookie response. 
 
 The Cookie (see below) and the number that was sent in the request are the contents of the encrypted part.
 
 The Cookie should be (112 bytes):
-[nonce][encrypted data:[uint64_t time][Sender's real public key (32 bytes)][Sender's DHT public key (32 bytes)]]
+[nonce]
+[encrypted data:
+    [uint64_t time]
+    [Sender's real public key (32 bytes)]
+    [Sender's DHT public key (32 bytes)]
+]
 
 The cookie is a 112 byte piece of data that is created and sent to the requester as part of the cookie response packet. A peer who wants to connect to another must obtain a cookie packet from the peer they are trying to connect to. The only way to send a valid handshake packet to another peer is to first obtain a cookie from them.
 
@@ -43,7 +65,15 @@ When responding to a cookie request packet the senders real public key is the kn
 When generating a cookie to put inside the encrypted part of the handshake: One of the requirements to connect successfully to someone else is that we know their DHT public key and their real long term public key meaning there is enough information to construct the cookie.
 
 Handshake packet:
-[uint8_t 26][Cookie][nonce (24 bytes)][Encrypted message containing: [24 bytes base nonce][session public key of the peer (32 bytes)][sha512 hash of the entire Cookie sitting outside the encrypted part][Other Cookie (used by the other to respond to the handshake packet)]]
+[uint8_t 26]
+[Cookie]
+[nonce (24 bytes)]
+[Encrypted message containing:
+    [24 bytes base nonce]
+    [session public key of the peer (32 bytes)]
+    [sha512 hash of the entire Cookie sitting outside the encrypted part]
+    [Other Cookie (used by the other to respond to the handshake packet)]
+]
 
 The packet id for handshake packets is 26. The cookie is a cookie obtained by sending a cookie request packet to the peer and getting a cookie response packet with a cookie in it. It may also be obtained in the handshake packet by a peer receiving a handshake packet (Other Cookie).
 
@@ -112,7 +142,11 @@ The reason why the handshake is like this is because of certain design requireme
 Due to how it is designed only one connection is possible at a time between 2 peers.
 
 Encrypted packets:
-[uint8_t 27][uint16_t (in network byte order) the last 2 bytes of the nonce used to encrypt this][encrypted with the session key and 'base nonce' set by the receiver in their handshake + packet number (starting at 0, big endian math):[plain data]]
+[uint8_t 27]
+[uint16_t (in network byte order) the last 2 bytes of the nonce used to encrypt this]
+[encrypted with the session key and 'base nonce' set by the receiver in their handshake + packet number (starting at 0, big endian math):
+    [plain data]
+]
 
 The packet id for encrypted packets is 27. Encrypted packets are the packets used to send data to the other peer in the connection. Since these packets can be sent over UDP the implementation must assume that they can arrive out of order or even not arrive at all.
 
@@ -149,7 +183,9 @@ TODO: the rest (Not done yet).
 
 Plain data in the encrypted packets:
 
-[uint32_t our recvbuffers buffer_start, (highest packet number handled + 1)][uint32_t packet number if lossless, our sendbuffer buffer_end if lossy][data]
+[uint32_t our recvbuffers buffer_start, (highest packet number handled + 1)]
+[uint32_t packet number if lossless, our sendbuffer buffer_end if lossy]
+[data]
 
 data ids:
 0: padding (skipped until we hit a non zero (data id) byte)
