@@ -1,0 +1,32 @@
+The code in toxcore is split into different modules (files, in this case) that
+each perform one function of the program. For example, there is one DHT module
+that implements a DHT, and a TCP\_server module that implements a Tox TCP
+server.
+
+The interface for each module is in the header (ending in a .h extension) file
+of the same name as its corresponding source (ending in a .c extension) file.
+Toxcore follows the principles of object-oriented programming. Each module has
+a new\_[Object Name] function to create the object or module, a do\_[Object
+Name] function to 'execute' the object, and a kill\_[Object Name] function to
+destroy the object. When looking at it from the point of view of an
+object-oriented language, the new\_[Object Name] function can be compared to
+the constructor and the kill\_[Object Name] function can be compared to the
+destructor. The do\_[Object Name] function should be called at least every
+second, but the minimum frequency at which it should be called depends on the
+object. do\_[Object Name] functions are written so that calling them at
+greater frequencies will not have any negative consequences, with the possible
+exception of higher resource usage. Depending on the module, calling the
+do\_[Object Name] functions at high intervals might introduce some issues.
+
+Each module will typically have a number of functions that use the object
+created by the new\_[Object Name] function as their first argument in order to
+interact with that object. The data structure of the object is in the module
+header, and so is completely accessible -- nothing has been made opaque --
+however, interacting with an object this way is discouraged. Reading a
+variable directly from the object structure is allowed, but writing to it
+directly from other modules is never allowed.
+
+Return values are documented as a comment above each function. Usually,
+negative values mean failure and 0 means success, but it depends on the
+function in question.
+
