@@ -1,15 +1,15 @@
-The Tox transport protocol is what uses to establish and send data securely to friends and provides encryption, ordered delivery, perfect forward secrecy. It is a UDP protocol but it is also used by when 2 friends connect over TCP relays.
+The Tox transport protocol is what Tox uses to establish and send data securely to friends and provides encryption, ordered delivery, and perfect forward secrecy. It is a UDP protocol but it is also used when 2 friends connect over TCP relays.
 
-The reason the protocol for connections to friends over TCP relays and direct UDP is the same is for simplicity and so the connection can switch between both without the peers needing to disconnect and reconnect. For example two Tox friends might first connect over TCP and a few seconds later switch to UDP when a direct UDP connection becomes possible. The opening up of the UDP route or 'hole punching' is done by the DHT module and the opening up of a relayed TCP connection is done by the TCP_connection module. The Tox transport protocol has the job of connecting two peers (tox friends) safely once a route or communications link between both is found. Direct UDP is preferred over TCP because it is direct and isn't limited by possibly congested TCP relays. Also, a peer can only connect to another using the Tox transport protocol if they know the real public key and DHT public key of the peer they want to connect to however both the DHT and TCP connection modules require this information in order to find and open the route to the peer which means we assume this information is known.
+The reason the protocol for connections to friends over TCP relays and direct UDP is the same is for simplicity and so the connection can switch between both without the peers needing to disconnect and reconnect. For example two Tox friends might first connect over TCP and a few seconds later switch to UDP when a direct UDP connection becomes possible. The opening up of the UDP route or 'hole punching' is done by the DHT module and the opening up of a relayed TCP connection is done by the TCP_connection module. The Tox transport protocol has the job of connecting two peers (tox friends) safely once a route or communications link between both is found. Direct UDP is preferred over TCP because it is direct and isn't limited by possibly congested TCP relays. Also, a peer can only connect to another using the Tox transport protocol if they know the real public key and DHT public key of the peer they want to connect to. However, both the DHT and TCP connection modules require this information in order to find and open the route to the peer which means we assume this information is known.
 
 Because this protocol has to work over UDP it must account for possible packet loss, packets arriving in the wrong order and has to implement some kind of congestion control. This also makes it work very well on TCP relays that we assume may go down at any time as the connection will stay strong even if there is need to switch to another TCP relay which will cause some packet loss. 
 
 
 Before sending the actual handshake packet the peer must obtain a cookie. This cookie step serves as a way for the receiving peer to confirm that the peer initiating the connection can receive the responses in order to prevent certain types of DoS attacks.
 
-The peer receiving a cookie request packet will not allocate any resources to the connection and will simply respond to the packet with a cookie response packet containing the cookie that the requesting peer must then put in the handshake to initiate the actual connection.
+The peer receiving a cookie request packet must not allocate any resources to the connection. They will simply respond to the packet with a cookie response packet containing the cookie that the requesting peer must then use in the handshake to initiate the actual connection.
 
-The cookie response must be sent back using the exact same link the cookie request packet was sent from. For example if a request is sent from UDP with ip port X, it must be sent back by UDP to ip port X. If it was received from a TCP OOB packet it must be sent back by a TCP OOB packet via the same relay with the destination being the peer who sent the response. If it was received from an established TCP relay connection it must be sent back via that same exact connection.
+The cookie response must be sent back using the exact same link the cookie request packet was sent from. For example, if a request is sent from UDP with ip port X, it must be sent back by UDP to ip port X. If it was received from a TCP OOB packet it must be sent back by a TCP OOB packet via the same relay with the destination being the peer who sent the response. If it was received from an established TCP relay connection it must be sent back via that same exact connection.
 
 When a cookie request is received, the peer must not use the information in the request packet for anything, he must not store it, he must only create a cookie and cookie response from it, then send the created cookie response packet and forget them. The reason for this is to prevent possible attacks. For example if a peer would allocate long term memory for each cookie request packet received then a simple packet flood would be enough to achieve an effective denial of service attack by making the program run out of memory.
 
@@ -26,7 +26,7 @@ cookie request packet (145 bytes):
 
 Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
 
-The packet id for cookie request packets is 24. The request contain the DHT public key of the sender which is the key used (The DHT private key) (along with the DHT public key of the receiver) to encrypt the encrypted part of the cookie packet and a nonce also used to encrypt the encrypted part of the packet. Padding used to be used for something else but I left it there because it makes the request packet only 16 bytes smaller that the response which makes it less appealing for use in amplification attacks. The number in the cookie request must be sent back untouched in the cookie response. This number is how the peer sending the request can be sure that the response received was a response to the packet that he sent.
+The packet id for cookie request packets is 24. The request contain the DHT public key of the sender which is the key used (The DHT private key) (along with the DHT public key of the receiver) to encrypt the encrypted part of the cookie packet and a nonce also used to encrypt the encrypted part of the packet. Padding is used to maintain backwards-compatibility with previous versions of the protocol. The number in the cookie request must be sent back untouched in the cookie response. This number is how the peer sending the request can be sure that the response received was a response to the packet that he sent.
 
 Toxcore currently sends 1 cookie request packet every second 8 times before it kills the connection if there are no responses.
 
@@ -60,7 +60,7 @@ When toxcore is started it generates a symmetric encryption key that it uses to 
 
 The time variable in the cookie is used to prevent cookie packets that are too old from being used. Toxcore has a time out of 15 seconds for cookie packets. If a cookie packet is used more than 15 seconds after it is created toxcore will see it as invalid.
 
-When responding to a cookie request packet the senders real public key is the known key sent by the peer in the encrypted part of the cookie request packet and the senders DHT public key is the key used to encrypt the encrypted part of the cookie request packet.
+When responding to a cookie request packet the sender's real public key is the known key sent by the peer in the encrypted part of the cookie request packet and the senders DHT public key is the key used to encrypt the encrypted part of the cookie request packet.
 
 When generating a cookie to put inside the encrypted part of the handshake: One of the requirements to connect successfully to someone else is that we know their DHT public key and their real long term public key meaning there is enough information to construct the cookie.
 
@@ -77,13 +77,13 @@ Handshake packet:
 
 The packet id for handshake packets is 26. The cookie is a cookie obtained by sending a cookie request packet to the peer and getting a cookie response packet with a cookie in it. It may also be obtained in the handshake packet by a peer receiving a handshake packet (Other Cookie).
 
-The nonce is a nonce used to encrypt the encrypted part of the handshake packet. The encrypted part of the handshake packet is encrypted with the long term keys of both peers. This is to make sure that both peers can make sure they are really speaking to the peer they think they are speaking to.
+The nonce is a nonce used to encrypt the encrypted part of the handshake packet. The encrypted part of the handshake packet is encrypted with the long term keys of both peers. This is to prevent impersonation. 
 
-Inside the encrypted part of the handshake packet there is a 'base nonce' and a session public key. The 'base nonce' is a nonce that the other should use to encrypt each data packet, adding + 1 to it for each data packet sent. (first packet is 'base nonce' + 0, next is 'base nonce' + 1, etc.. Note that for mathematical operations the nonce is considered to be a 24 byte number in big endian format). The session key is the temporary connection public key that the peer has generated for this connection and it sending to the other. This session key is used so that the connection has perfect forward secrecy. it is important to save the private key counterpart of the session public key sent in the handshake, the public key received by the other and both the received and sent base nonces as they are used to encrypt/decrypt the data packets.
+Inside the encrypted part of the handshake packet there is a 'base nonce' and a session public key. The 'base nonce' is a nonce that the other should use to encrypt each data packet, adding + 1 to it for each data packet sent. (first packet is 'base nonce' + 0, next is 'base nonce' + 1, etc.. Note that for mathematical operations the nonce is considered to be a 24 byte number in big endian format). The session key is the temporary connection public key that the peer has generated for this connection and it sending to the other. This session key is used so that the connection has perfect forward secrecy. It is important to save the private key counterpart of the session public key sent in the handshake, the public key received by the other and both the received and sent base nonces as they are used to encrypt/decrypt the data packets.
 
 The hash of the cookie in the encrypted part is used to make sure that an attacker has not taken an older valid handshake packet and then replaced the cookie packet inside with a newer one which would be bad as they could replay it and might be able to make a mess.
 
-The 'Other cookie' is a valid cookie that we put in the handshake so that the other can respond with a valid handshake without having to make a cookie request to obtain one.
+The 'Other Cookie' is a valid cookie that we put in the handshake so that the other can respond with a valid handshake without having to make a cookie request to obtain one.
 
 The handshake packet is sent by both sides of the connection. If a peer receives a handshake it will check if the cookie is valid, if the encrypted section decrypts and validates, if the cookie hash is valid, if long term public key belongs to a known friend. If all these are true then the connection is considered 'Accepted' but not 'Confirmed'.
 
@@ -186,7 +186,7 @@ Data in the encrypted packets:
 [uint32_t packet number if lossless, sendbuffer buffer_end if lossy, (big endian)]
 [data]
 
-Encrypted packets may be lossy or lossless. Lossy packets are simply packets encrypted packets that are sent to the other. If they are lost, arrive in the wrong order or even if an attacker duplicates them (be sure to take this into account for anything that uses lossy packets) they will simply be decrypted as they arrive and passed upwards to what should handle them depending on the data id.
+Encrypted packets may be lossy or lossless. Lossy packets are simply encrypted packets that are sent to the other. If they are lost, arrive in the wrong order or even if an attacker duplicates them (be sure to take this into account for anything that uses lossy packets) they will simply be decrypted as they arrive and passed upwards to what should handle them depending on the data id.
 
 Lossless packets are packets containing data that will be delivered in order by the implementation of the protocol. In this protocol, the receiver tells the sender which packet numbers he has received and which he has not and the sender must resend any packets that are dropped. Any attempt at doubling packets will cause all (except the first received) to be ignored.
 
@@ -199,7 +199,7 @@ How the reliability is achieved:
 
 First it is important to say that packet numbers do roll over, the next number after 0xFFFFFFFF (maximum value in 4 bytes) is 0. Hence all the mathematical operations dealing with packet numbers are assumed to be done only on unsigned 32 bit integer unless said otherwise. For example 0 - 0xFFFFFFFF would equal to 1 because of the rollover.
 
-When sending a lossless packet, the packet is created with it's packet number being the number of the last lossless packet created + 1 (starting at 0). The packet numbers are used for both reliability and in ordered delivery and so must be sequential.
+When sending a lossless packet, the packet is created with its packet number being the number of the last lossless packet created + 1 (starting at 0). The packet numbers are used for both reliability and in ordered delivery and so must be sequential.
 
 The packet is then stored along with its packet number in order for the peer to be able to send it again if the receiver does not receive it. Packets are only removed from storage when the receiver confirms they have received them.
 
@@ -208,7 +208,7 @@ The receiver receives packets and stores them along with their packet number. Wh
 Assuming a new connection, the sender sends 5 lossless packets to the receiver:
 0, 1, 2, 3, 4 are the packet numbers sent and the receiver receives: 3, 2, 0, 2 in that order.
 
-the receiver will saves the packets and discards the second packet with the number 2, he has: 0, 2, 3 in his buffer. He will pass the first packet to the relevant module and remove it from the array but since packet number 1 is missing he will stop there. Contents of the buffer are now: 2, 3. The receiver knows packet number 1 is missing and will request it from the sender by using a packet request packet:
+The receiver will save the packets and discards the second packet with the number 2, he has: 0, 2, 3 in his buffer. He will pass the first packet to the relevant module and remove it from the array but since packet number 1 is missing he will stop there. Contents of the buffer are now: 2, 3. The receiver knows packet number 1 is missing and will request it from the sender by using a packet request packet:
 
 
 data ids:
@@ -224,27 +224,25 @@ Packet numbers are the first byte of data in the packet.
 
 packet request packet: [uint8_t (1)][uint8_t num][uint8_t num][uint8_t num]...[uint8_t num]
 
-Packet request packets are used by one side of the connection to request packets from the other. To create a full packet request packet, the one requesting the packet takes the last packet number that was processed (sent to the relevant module and removed from the array (0 in the example above)). Subtract the number of the first missing packet from that number (1 - 0) = 1. Which means the full packet to request packet number 1 will look like: [uint32_t 1][uint32_t 0][uint8_t 1][uint8_t 1]. If packet number 4 was being requested as well, take the difference between the packet number and the last packet number being requested (4 - 1) = 3. So the packet will look like: [uint32_t 1][uint32_t 0][uint8_t 1][uint8_t 1][uint8_t 3]. But what if the number is more than 255 bigger? Lets say the peer needs to request packets 3, 6, 1024, the packet will look like: [uint32_t 1][uint32_t 2][uint8_t (1][uint8_t 3][uint8_t 3][uint8_t 0][uint8_t 0][uint8_t 0][uint8_t 253]
+Packet request packets are used by one side of the connection to request packets from the other. To create a full packet request packet, the one requesting the packet takes the last packet number that was processed (sent to the relevant module and removed from the array (0 in the example above)). Subtract the number of the first missing packet from that number (1 - 0) = 1. Which means the full packet to request packet number 1 will look like: [uint32_t 1][uint32_t 0][uint8_t 1][uint8_t 1]. If packet number 4 was being requested as well, take the difference between the packet number and the last packet number being requested (4 - 1) = 3. So the packet will look like: [uint32_t 1][uint32_t 0][uint8_t 1][uint8_t 1][uint8_t 3]. But what if the number is greater than 255? Let's say the peer needs to request packets 3, 6, 1024, the packet will look like: [uint32_t 1][uint32_t 2][uint8_t (1][uint8_t 3][uint8_t 3][uint8_t 0][uint8_t 0][uint8_t 0][uint8_t 253]
 
 Each 0 in the packet represents adding 255 until a non 0 byte is reached which is then added and the resulting requested number is what is left.
 
-This request is designed to be small when requesting packets in real network conditions where the requested packet numbers will be close to each other. Putting each requested 4 byte packet number would be very simple but would make the request packets a bit too large which is why the packets look like this.
+This request is designed to be small when requesting packets in real network conditions where the requested packet numbers will be close to each other. Putting each requested 4 byte packet number would be very simple but would make the request packets unnecessarily large which is why the packets look like this.
 
 When a request packet is received, it will be decoded and all packets in between the requested packets will be assumed to be successfully received by the other.
 
-Packet request packets are sent at least every 1 second in toxcore and more when packets are being received. Note that the current formula that is used to calculate this time between sending request packets was pretty much a guess and is most likely not the best one to use.
+Packet request packets are sent at least every 1 second in toxcore and more when packets are being received. 
 
-The current formula used is: 
+The current formula used is (note that this formula is likely sub-optimal): 
 REQUEST_PACKETS_COMPARE_CONSTANT = 50.0
 double request_packet_interval = (REQUEST_PACKETS_COMPARE_CONSTANT / (((double)num_packets_array(&conn->recv_array) + 1.0) / (conn->packet_recv_rate + 1.0)));
 
-num_packets_array(&conn->recv_array) returns the difference between the highest packet number received and the last one handled. In the toxcore code it reffers to the total size of the current array (with the holes which are the placeholders for not yet received packets that are known to be missing).
+num_packets_array(&conn->recv_array) returns the difference between the highest packet number received and the last one handled. In the toxcore code it refers to the total size of the current array (with the holes which are the placeholders for not yet received packets that are known to be missing).
 
 conn->packet_recv_rate is the number of data packets successfully received per second.
 
 This formula was created with the logic that the higher the 'delay' in packets (num_packets_array(&conn->recv_array)) vs the speed of packets received, the more request packets should be sent.
-
-As I said it most likely isn't optimized at all.
 
 Requested packets are resent every time they can be resent as in they will obey the congestion control and not bypass it. They are resent once, subsequent request packets will be used to know if the packet was received or if it should be resent.
 
