@@ -85,7 +85,7 @@ The hash of the cookie in the encrypted part is used to make sure that an attack
 
 The 'Other Cookie' is a valid cookie that we put in the handshake so that the other can respond with a valid handshake without having to make a cookie request to obtain one.
 
-The handshake packet is sent by both sides of the connection. If a peer receives a handshake it will check if the cookie is valid, if the encryped section decrypts and validates, if the cookie hash is valid, if long term public key belongs to a known friend. If all these are true then the connection is considered 'Accepted' but not 'Confirmed'.
+The handshake packet is sent by both sides of the connection. If a peer receives a handshake it will check if the cookie is valid, if the encrypted section decrypts and validates, if the cookie hash is valid, if long term public key belongs to a known friend. If all these are true then the connection is considered 'Accepted' but not 'Confirmed'.
 
 If there is no existing connection to the peer identified by the long term public key to set to 'Accepted', one will be created with that status. If a connection to such peer with a not yet 'Accepted' status to exists, this connection is set to accepted. If a connection with a 'Confirmed' status exists for this peer, the handshake packet will be ignored and discarded (The reason for discarding it is that we do not want slightly late handshake packets to kill the connection) except if the DHT public key in the cookie contained in the handshake packet is different from the known DHT public key of the peer. If this happens the connection will be immediately killed because it means it is no longer valid and a new connection will be created immediately with the 'Accepted' status.
 
@@ -228,23 +228,21 @@ Packet request packets are used by one side of the connection to request packets
 
 Each 0 in the packet represents adding 255 until a non 0 byte is reached which is then added and the resulting requested number is what is left.
 
-This request is designed to be small when requesting packets in real network conditions where the requested packet numbers will be close to each other. Putting each requested 4 byte packet number would be very simple but would make the request packets a bit too large which is why the packets look like this.
+This request is designed to be small when requesting packets in real network conditions where the requested packet numbers will be close to each other. Putting each requested 4 byte packet number would be very simple but would make the request packets unnecessarily large which is why the packets look like this.
 
 When a request packet is received, it will be decoded and all packets in between the requested packets will be assumed to be successfully received by the other.
 
-Packet request packets are sent at least every 1 second in toxcore and more when packets are being received. Note that the current formula that is used to calculate this time between sending request packets was pretty much a guess and is most likely not the best one to use.
+Packet request packets are sent at least every 1 second in toxcore and more when packets are being received. 
 
-The current formula used is: 
+The current formula used is (note that this formula is likely sub-optimal): 
 REQUEST_PACKETS_COMPARE_CONSTANT = 50.0
 double request_packet_interval = (REQUEST_PACKETS_COMPARE_CONSTANT / (((double)num_packets_array(&conn->recv_array) + 1.0) / (conn->packet_recv_rate + 1.0)));
 
-num_packets_array(&conn->recv_array) returns the difference between the highest packet number received and the last one handled. In the toxcore code it reffers to the total size of the current array (with the holes which are the placeholders for not yet received packets that are known to be missing).
+num_packets_array(&conn->recv_array) returns the difference between the highest packet number received and the last one handled. In the toxcore code it refers to the total size of the current array (with the holes which are the placeholders for not yet received packets that are known to be missing).
 
 conn->packet_recv_rate is the number of data packets successfully received per second.
 
 This formula was created with the logic that the higher the 'delay' in packets (num_packets_array(&conn->recv_array)) vs the speed of packets received, the more request packets should be sent.
-
-As I said it most likely isn't optimized at all.
 
 Requested packets are resent every time they can be resent as in they will obey the congestion control and not bypass it. They are resent once, subsequent request packets will be used to know if the packet was received or if it should be resent.
 
