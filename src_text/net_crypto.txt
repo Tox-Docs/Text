@@ -262,3 +262,4 @@ A congestion event can be defined as an event when the number of requested packe
 
 Like I said this isn't perfect and a better solution can likely be found or the numbers tweaked.
 
+To fix the possible issue where it would be impossible to send very low bandwidth data like text messages when sending high bandwidth data like files it is possible to make priority packets ignore the congestion control completely by placing them into the send packet queue and sending them even if the congestion control says not to. This is used in toxcore for all non file transfer packets to prevent file transfers from preventing normal message packets from being sent.
