@@ -1,0 +1,167 @@
+The goal of the onion module in Tox is to prevent other peers in the Tox network that are not friends from finding out the temporary DHT public key from a known long term public key of the peer and to prevent peers from discovering the long term public key of peers when only the temporary DHT key is known.
+
+Basically it makes sure only friends of a peer can find it and connect to it and indirectly makes sure non friends cannot find the ip address of the peer when knowing the Tox address of the friend.
+
+The only way to prevent peers in the network from associating the temporary DHT public key and the long term public key in to first not broadcast the long term key and only give others in the network that are not friends the DHT public key.
+
+The onion lets peers send their friends who they know the real public key of (part of the Tox ID) their DHT public key so that the friends can then find and connect to them without other peers being able to figure out the real public keys of peers.
+
+So how does the onion work?
+
+The onion basically works by enabling peers to announce their real public key to peers by going through the onion path. It is like a DHT but through onion paths. In fact it uses the DHT in order for peers to be able to find the peers with ids closest to their public key by going through onion paths.
+
+In order to announce his real public key anonymously to the Tox network while using the onion the peer first picks 3 random nodes that he knows (They can be from anywhere, the DHT, connected TCP relays or nodes found while finding peers with the onion). The nodes should be picked in a way that makes them unlikely to be operated by the same person perhaps by looking at the ip addresses and looking if they are in the same subnet or other ways. More research is needed to make sure nodes are picked in the safest way possible. Note that nodes may not be
+
+These nodes are referred to as nodes A, B and C. Note that if the peer cannot communicate via UDP, his first peer will be one of the TCP relays he is connected to which he will use to send his onion packet to the network.
+
+TCP relays can only be node A or the first peer in the chain since Tox only supports this because in this case the TCP relay is essentially acting as a gateway to the network. The data sent to the TCP Client module to be sent as a TCP onion packet by the module is different from the one sent directly via UDP. This is because it doesn't need to be encrypted (The connection to the TCP relay server is already encrypted).
+
+First I will explain how communicating via onion packets work.
+
+Note: nonce is a 24 byte nonce.
+
+Onion packet (request):
+
+Initial (TCP) data sent as the data of a onion packet through the TCP client module:
+
+[IP_Port of node B][a random public key]encrypted with the random private key and the pub key of Node B and the nonce:[ 
+[IP_Port of node C][a random public key]encrypted with the random private key and the pub key of Node C and the nonce:[ 
+[IP_Port of node D][data to send to Node D]]]
+
+initial (UDP) (sent from us to node A):
+
+[uint8_t packet id (128)][nonce]
+[our temp DHT public key]encrypted with our temp DHT private key and the pub key of Node A and the nonce:[ 
+[IP_Port of node B][a random public key]encrypted with the random private key and the pub key of Node B and the nonce:[ 
+[IP_Port of node C][a random public key]encrypted with the random private key and the pub key of Node C and the nonce:[ 
+[IP_Port of node D][data to send to Node D]]]]
+
+(sent from node A to node B):
+
+[uint8_t packet id (129)][nonce]
+[a random public key]encrypted with the random private key and the pub key of Node B and the nonce:[ 
+[IP_Port of node C][a random public key]encrypted with the random private key and the pub key of Node C and the nonce:[ 
+[IP_Port of node D][data to send to Node D]]][nonce (for the following symmetric encryption)]encrypted with temp symmetric key of Node A: [IP_Port (of us)]
+
+(sent from node B to node C):
+
+[uint8_t packet id (130)][nonce]
+[a random public key]encrypted with the random private key and the pub key of Node C and the nonce:[ 
+[IP_Port of node D][data to send to Node D]][nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node B:[IP_Port (of Node A)[nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node A: [IP_Port (of us)]]
+
+(sent from node C to node D):
+
+[data to send to Node D][nonce (for the following symmetric encryption)]encrypted with temp symmetric key of Node C:
+[IP_Port (of Node B)[nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node B:[IP_Port (of Node A)[nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node A: [IP_Port (of us)]]]
+
+Onion packet (response):
+
+initial (sent from node D to node C):
+
+[uint8_t packet id (140)][nonce (for the following symmetric encryption)]encrypted with temp symmetric key of Node C:
+[IP_Port (of Node B)[nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node B:[IP_Port (of Node A)[nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node A: [IP_Port (of us)]]][data to send back]
+
+(sent from node C to node B):
+
+[uint8_t packet id (141)][nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node B:[IP_Port (of Node A)[nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node A: [IP_Port (of us)]][data to send back]
+
+(sent from node B to node A):
+
+[uint8_t packet id (142)][nonce (for the following symmetric encryption)]
+encrypted with temp symmetric key of Node A: [IP_Port (of us)][data to send back]
+
+(sent from node A to us):
+
+[data to send back]
+
+Basically each packet is encrypted multiple times so that only node A will be able to receive and decrypt the first packet and know where to send it to, node B will only be able to receive that decrypted packet and decrypt it again, know where to send it and so on. You will also notice a piece of encrypted data (The sendback) at the end of the packet that grows larger and larger at every layer with the IP of the previous node in it. This is how the node receiving the end data (Node D) will be able to send data back. 
+
+Basically when a peer receives an onion packet, they will decrypt it, encrypt the coordinates (IP/port) of the source along with the already existing encrypted data (if it exists) with a symmetric key known only by the peer and only refreshed every hour (in toxcore) as a security measure to force expire paths.
+
+Here's a diagram how it works:
+
+peer -> [onion1[onion2[onion3[data]]]] -> Node A -> [onion2[onion3[data]]][sendbackA] -> Node B -> [onion3[data]][sendbackB[sendbackA]] -> Node C -> [data][SendbackC[sendbackB[sendbackA]]]-> Node D (end)
+
+Node D -> [SendbackC[sendbackB[sendbackA]]][response] -> Node C -> [sendbackB[sendbackA]][response] -> Node B -> [sendbackA][response] -> Node A -> [response] -> peer
+
+The random public keys in the onion packets are temporary public keys generated for and used for that onion path only. This is done in order to make it difficult for others to link different paths together. Each encrypted layer must have a different public key. This is the reason why there are multiple keys in the packet definintions above.
+
+The nonce is used to encrypt all the layers of encryption. This 24 byte nonce should be randomly generated. If it isn't randomly generated and has a relation to nonces used for other paths it could be possible to tie different onion paths together.
+
+The IP_Port is an ip and port in packed format: [byte (TOX_AF_INET (2)(for ipv4) or TOX_AF_INET6 (10)(for ipv6))][ip(4 bytes if ipv4, 16 bytes if ipv6)][if ipv4 this is 12 bytes of zeroes][port (2 bytes)]
+
+The IP_port will always end up being of size 19 bytes. This is to make it hard to know if an ipv4 or ipv6 ip is in the packet just by looking at the size. The 12 bytes of zeros when ipv4 must be set to 0 and not let uninitialized as some info may be leaked this way if it stays uninitialized. All numbers here are in big endian format.
+
+The IP_Port in the sendback data can be in any format as long as the length is 19 bytes because only the one who writes it can decrypt it and read it however using the previous format is recommended because of code reuse. The nonce in the sendback data must be a 24 byte nonce.
+
+As you noticed all different onion layers each have a packed id that identifies them so that an implementation knows exactly how to handle them. Note that any data being sent back must be encrypted and appear random and must not leak information in any way as all the nodes in the path will see it. 
+
+This explained how to create onion packets and how they are sent back. Next is what is actually sent and received on top of these onion packets or paths.
+
+Note: nonce is a 24 byte nonce.
+
+announce request packet:
+[uint8_t packet id (131)][nonce][our real long term public key or a temporary one (see next)]
+encrypted (with our real long term private key if we want to announce ourselves, a temporary one if we are searching for friends) and the pub key of Node D and the nonce:
+[[(32 bytes) ping_id][public key we are searching for][public key that we want those sending back data packets to use.][data to send back in response(8 bytes)]]
+
+(if the ping id is zero, respond with a announce response packet)
+(If the ping id matches the one the node sent in the announce response and the public key matches the one being searched for, 
+add the part used to send data to our list (if the list is full make it replace the furthest entry))
+
+data to route request packet:
+[uint8_t packet id (133)][public key of destination node][nonce][temporary just generated public key]
+encrypted with that temporary private key and the nonce and the public key from the announce response packet of the destination node:[data]
+(if Node D contains the ret data for the node, it sends the stuff in this packet as a data to route response packet to the right node)
+
+The data in the previous packet is in format: [real public key of sender]
+encrypted with real private key of the sender, the nonce in the data packet and
+the real public key of the receiver:[[uint8_t id][data (optional)]]
+
+Data sent to us:
+announce response packet:
+[uint8_t packet id (132)][data to send back in response(8 bytes)][nonce]
+encrypted with the DHT private key of Node D, the public key in the request and the nonce:[[uint8_t is_stored]
+[(32 bytes) ping_id if is_stored is 0 or 2, public key that must be used to send data packets if is_stored is 1][Nodes: (max 4, packed node format (see DHT))]]
+(if the is_stored is not 0, it means the information to reach the public key we are searching for is stored on this node)
+is_stored is 2 as a response to a peer trying to announce himself to tell the peer that he is currently announced successfully.
+
+data to route response packet:
+[uint8_t packet id (134)][nonce][temporary just generated public key]
+encrypted with that temporary private key, the nonce and the public key from the announce response packet of the destination node:[data]
+
+There are 2 types of request packets and 2 'response' packets to go with them. The announce request is used to announce ourselves to a node and announce response packet is used by the node to respond to this packet. The data to route request packet is a packet used to send packets through the node to another peer that has announced itself and that we have found. The data to route response packet is what the node transforms this packet into.
+
+To announce ourselves to the network we must first find using announce packets the peers with DHT public key closest to our real public key. Then we must announce ourselves to these peers. Friends will then be able to send messages to us using data to route packets by sending them to these peers. To find the peers we have announced ourselves to our friends will find the peers closest to our real public key and ask them if they know us. They will then be able to use these peers that know us to send us some messages that will contain their DHT public key (which we need to know to connect directly to them), TCP relays that they are connected to (so we can connect to them with these relays if we need to) and some DHT peers they are connected to (so we can find them faster in the DHT).
+
+announce request packets are the same packets used slightly differently if we are announcing ourselves or searching for peers that know one of our friends.
+
+If we are announcing ourselves we must put our real long term public key in the packet and encrypt it with our long term private key. This is so the peer we are announcing ourselves to can be sure that we actually own that public key. If we are looking for peers we use a temporary public key used only for packets used to look for that peer in order to leak as little as possible. The ping_id is a 32 byte number which is sent to us in the announce response and we must send back to the peer in another announce request. This is done in order to prevent people from easily announcing themselves many times as they have to prove they can respond to packets from the peer before the peer will let them announce themselves. This ping_id is set to 0 when none is known.
+
+The public key we are searching for is set to our long term public key when announcing ourselves and set to the long term pubic key of the friend we are searching for if we are looking for peers.
+
+When announcing ourselves the public key we want others to use to send us data back is set to a temporary public key, the private key part of this key is what we will be using to decrypt data sent to us with data to route packets. The goal of this public key is to prevent peers from saving old data to route packets from previous sessions and be able to replay them in future Tox sessions. This key is set to zero when searching for peers.
+
+The sendback data is an 8 byte number that will be sent back in the announce packet response. Its goal is to be used as a way to know which announce request packet the response is responding to hence its location in the unencrypted part of the response as it is needed in toxcore to find and check info about the packet in order to decrypt it and handle it correctly. Toxcore uses it as an index to its special ping_array.
+
+Why don't we have different packets instead of this mess of one announce packet request and one response that does everything? It makes it a lot more difficult for possible attackers from knowing if we are merely announcing ourselves or if we are just looking for friends as the packets for both look the exact same and are even the same size.
+
+The announce response packet contains the sendback data which was sent in the request this packet is responding to, a 24 byte random nonce. The is stored number is a number set to either 0, 1 or 2. 0 means that the public key that was being searched in the request isn't stored or known by this peer. 1 means that it is and 2 means that we are announced successfully at that node. The reason for the need for both 1 and 2 are that at first there was only 1 and people would restart their Tox clients and the client would check if they were announced correctly and see 1 and the response wouldn't contain a ping_id (not possible to reannounce without a ping_id) it was the previous instance that was announced and not the new instance leading to nobody being to actually find them until the timeout for the announce passed. This was fixed by adding the 2.
+
+The next 32 bytes can either be a ping_id when the is stored number is 0 or 2 for the peer to announce himself. When is stored is 1 it corresponds to a public key (the send back data public key set by the friend in their announce request) that must be used to encrypt and send data to the friend.
+
+Then there is an optional maximum 4 nodes in DHT packed nodes format (see DHT) attached to the response which denote the 4 DHT peers with the DHT public keys closest to the searched public key in the announce request known by the peer (see DHT). Toxcore uses the same function to find these peers as the function to find peers for get node DHT responses. Peers wanting to announce themselves or searching for peers that 'know' their friends will recursively query closer and closer peers until they find the closest they can and then either announce themselves to them or just ping them every once in a while to know if their friend can be contacted. Note that the distance function used for this is the same as the Tox DHT.
+
+Data to route request packets are packets used to send data directly to another peer via a node that knows that peer. The public key is the public key of the final destination where we want the packet to be sent (The real public key of our friend). The nonce is a 24 byte random nonce and the public key is a random temporary public key to encrypt the data in the packet and used if possible only to send packets to this friend (we want to leak as little info to the network so we use temp public keys we don't want a peer to see the same public keys and be able to link things together). The data is encrypted data that we want to send to the peer with the public key.
+
+The route response packets are just the last elements (nonce, public key. encrypted data) of the data to route request packet copied into a new packet and sent to the appropriate destination.
+
+To be continued...
