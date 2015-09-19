@@ -10,7 +10,7 @@ So how does the onion work?
 
 The onion basically works by enabling peers to announce their real public key to peers by going through the onion path. It is like a DHT but through onion paths. In fact it uses the DHT in order for peers to be able to find the peers with ids closest to their public key by going through onion paths.
 
-In order to announce his real public key anonymously to the Tox network while using the onion the peer first picks 3 random nodes that he knows (They can be from anywhere, the DHT, connected TCP relays or nodes found while finding peers with the onion). The nodes should be picked in a way that makes them unlikely to be operated by the same person perhaps by looking at the ip addresses and looking if they are in the same subnet or other ways. More research is needed to make sure nodes are picked in the safest way possible. Note that nodes may not be
+In order to announce his real public key anonymously to the Tox network while using the onion the peer first picks 3 random nodes that he knows (They can be from anywhere, the DHT, connected TCP relays or nodes found while finding peers with the onion). The nodes should be picked in a way that makes them unlikely to be operated by the same person perhaps by looking at the ip addresses and looking if they are in the same subnet or other ways. More research is needed to make sure nodes are picked in the safest way possible.
 
 These nodes are referred to as nodes A, B and C. Note that if the peer cannot communicate via UDP, his first peer will be one of the TCP relays he is connected to which he will use to send his onion packet to the network.
 
