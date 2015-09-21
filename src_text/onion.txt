@@ -160,7 +160,9 @@ The sendback data is an 8 byte number that will be sent back in the announce pac
 
 Why don't we use different packets instead of having one announce packet request and one response that does everything? It makes it a lot more difficult for possible attackers to know if we are merely announcing ourselves or if we are looking for friends as the packets for both look the same and are the same size.
 
-The announce response packet contains the sendback data, which was sent in the request this packet is responding to, a 24 byte random nonce. This stored number is set to either 0, 1 or 2. 0 means that the public key that was being searched in the request isn't stored or known by this peer. 1 means that it is and 2 means that we are announced successfully at that node. Both 1 and 2 are needed so that when clients are restarted it is possible to reannounce without waiting for the timeout of the previous announce. This would not otherwise be possible as a client would receive response 1 without a ping_id which is needed in order to reannounce successfully.
+The unencrypted part of an announce response packet contains the sendback data, which was sent in the request this packet is responding to and a 24 byte random nonce used to encrypt the encrypted part.
+
+The is_stored number is set to either 0, 1 or 2. 0 means that the public key that was being searched in the request isn't stored or known by this peer. 1 means that it is and 2 means that we are announced successfully at that node. Both 1 and 2 are needed so that when clients are restarted it is possible to reannounce without waiting for the timeout of the previous announce. This would not otherwise be possible as a client would receive response 1 without a ping_id which is needed in order to reannounce successfully.
 
 When the is_stored number is 0 or 2, the next 32 bytes is a ping_id. When is_stored is 1 it corresponds to a public key (the send back data public key set by the friend in their announce request) that must be used to encrypt and send data to the friend.
 
@@ -186,7 +188,7 @@ Toxcore will look if the public key being searched is in the datastructure. If i
 
 If the public key is in the datastructure, it will check whether the public key that was used to encrypt the announce packet is equal to the announced public key, if it isn't then it means that the peer is searching for a peer and that we know it. This means the is_stored is set to 1 and the sending back data public key in the announce entry is copied to the packet. 
 
-If it is equal meaning the peer is announcing itself and an entry for it exists, the sending back data public key is checked to see if it equals the one it the packet. If it is not equal it means that it is outdated, probably because the announcing peer's toxcore instance was restarted and so their is_stored is set to 0, if it is equal it means the peer is announced correctly so the is_stored is set to 2. The first generated ping_id is then copied to the packet.
+If it (key used to encrypt the announce packet) is equal (to the announced public key which is also the 'public key we are searching for' in the announce packet) meaning the peer is announcing itself and an entry for it exists, the sending back data public key is checked to see if it equals the one it the packet. If it is not equal it means that it is outdated, probably because the announcing peer's toxcore instance was restarted and so their is_stored is set to 0, if it is equal it means the peer is announced correctly so the is_stored is set to 2. The first generated ping_id is then copied to the packet.
 
 Once the packet is contructed a random 24 byte nonce is generated, the packet is encrypted (the shared key used to decrypt the request can be saved and used to encrypt the response to save an expensive key derivation operation), the data to send back is copied to the unencrypted part and the packet is sent back as a onion response packet.
 
