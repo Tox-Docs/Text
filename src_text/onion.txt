@@ -160,7 +160,9 @@ The sendback data is an 8 byte number that will be sent back in the announce pac
 
 Why don't we use different packets instead of having one announce packet request and one response that does everything? It makes it a lot more difficult for possible attackers to know if we are merely announcing ourselves or if we are looking for friends as the packets for both look the same and are the same size.
 
-The announce response packet contains the sendback data, which was sent in the request this packet is responding to, a 24 byte random nonce. This stored number is set to either 0, 1 or 2. 0 means that the public key that was being searched in the request isn't stored or known by this peer. 1 means that it is and 2 means that we are announced successfully at that node. Both 1 and 2 are needed so that when clients are restarted it is possible to reannounce without waiting for the timeout of the previous announce. This would not otherwise be possible as a client would receive response 1 without a ping_id which is needed in order to reannounce successfully.
+The unencrypted part of an announce response packet contains the sendback data, which was sent in the request this packet is responding to and a 24 byte random nonce used to encrypt the encrypted part.
+
+The is_stored number is set to either 0, 1 or 2. 0 means that the public key that was being searched in the request isn't stored or known by this peer. 1 means that it is and 2 means that we are announced successfully at that node. Both 1 and 2 are needed so that when clients are restarted it is possible to reannounce without waiting for the timeout of the previous announce. This would not otherwise be possible as a client would receive response 1 without a ping_id which is needed in order to reannounce successfully.
 
 When the is_stored number is 0 or 2, the next 32 bytes is a ping_id. When is_stored is 1 it corresponds to a public key (the send back data public key set by the friend in their announce request) that must be used to encrypt and send data to the friend.
 
@@ -186,7 +188,7 @@ Toxcore will look if the public key being searched is in the datastructure. If i
 
 If the public key is in the datastructure, it will check whether the public key that was used to encrypt the announce packet is equal to the announced public key, if it isn't then it means that the peer is searching for a peer and that we know it. This means the is_stored is set to 1 and the sending back data public key in the announce entry is copied to the packet. 
 
-If it is equal meaning the peer is announcing itself and an entry for it exists, the sending back data public key is checked to see if it equals the one it the packet. If it is not equal it means that it is outdated, probably because the announcing peer's toxcore instance was restarted and so their is_stored is set to 0, if it is equal it means the peer is announced correctly so the is_stored is set to 2. The first generated ping_id is then copied to the packet.
+If it (key used to encrypt the announce packet) is equal (to the announced public key which is also the 'public key we are searching for' in the announce packet) meaning the peer is announcing itself and an entry for it exists, the sending back data public key is checked to see if it equals the one it the packet. If it is not equal it means that it is outdated, probably because the announcing peer's toxcore instance was restarted and so their is_stored is set to 0, if it is equal it means the peer is announced correctly so the is_stored is set to 2. The first generated ping_id is then copied to the packet.
 
 Once the packet is contructed a random 24 byte nonce is generated, the packet is encrypted (the shared key used to decrypt the request can be saved and used to encrypt the response to save an expensive key derivation operation), the data to send back is copied to the unencrypted part and the packet is sent back as a onion response packet.
 
@@ -217,7 +219,7 @@ If we find peers (more than 1) that know a friend we will send them an onion dat
 Onion data packets are packets sent as the data of data to route packets.
 
 Onion data packets:
-[long term public key of sender][Encrypted with long term private key of sender and the long term public key of receiver:[data]]
+[long term public key of sender][Encrypted with long term private key of sender, the long term public key of receiver and the nonce used in the data to route request packet used to send this onion data packet (shaves off 24 bytes):[data]]
 
 DHT public key packet:
 [uint8_t packet id (156)][uint64_t (in network byte order) no_replay, the packet will only be accepted if this number is bigger than the last one received][our dht public key][(maximum of 4) packed nodes format with TCP so that the friend can connect to us]
@@ -226,7 +228,16 @@ Why another round of encryption? We have to prove to the receiver that we own th
 
 The no_replay number is protection if someone tries to replay an older packet and should be set to an always increasing number. It is 8 bytes so you should set a high resolution monotonic time as the value.
 
-We send this packet every 30 seconds if there is more than one peer (in the 8) that says they our friend is announced on them. This packet can also be sent through the DHT module as a DHT routed request packet (see DHT) if we know the DHT public key of the friend and are looking for them in the DHT but have not connected to them yet.
+We send this packet every 30 seconds if there is more than one peer (in the 8) that says they our friend is announced on them. This packet can also be sent through the DHT module as a DHT request packet (see DHT) if we know the DHT public key of the friend and are looking for them in the DHT but have not connected to them yet. 
+
+When sent as a DHT request packet (this is the data sent in the DHT request packet):
+[uint8_t packet id (156)][long term public key of sender][24 byte nonce][Encrypted with long term private key of sender, the long term public key of receiver and the nonce:[DHT public key packet]]
+
+When sent as a DHT request packet the DHT public key packet is (before being sent as the data of a DHT request packet) encrypted with the long term keys of both the sender and receiver and put in that format. This is done for the same reason as the double encryption of the onion data packet.
+
+Toxcore tries to resend this packet through the DHT every 20 seconds.
+
+Toxcore has a DHT request packet handler that passes received DHT public key packets from the DHT module to this module.
 
 If we receive a DHT public key packet, we will first check if the DHT packet is from a friend, if it is not from a friend, it will be discarded. The no_replay will then be checked to see if it is good and no packet with a lower one was received during the session. The DHT key, the TCP nodes in the packed nodes and the DHT nodes in the packed nodes will be passed to their relevant modules. The fact that we have the DHT public key of a friend means this module has achieved its goal.
 
