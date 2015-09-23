@@ -219,7 +219,7 @@ If we find peers (more than 1) that know a friend we will send them an onion dat
 Onion data packets are packets sent as the data of data to route packets.
 
 Onion data packets:
-[long term public key of sender][Encrypted with long term private key of sender and the long term public key of receiver:[data]]
+[long term public key of sender][Encrypted with long term private key of sender, the long term public key of receiver and the nonce used in the data to route request packet used to send this onion data packet (shaves off 24 bytes):[data]]
 
 DHT public key packet:
 [uint8_t packet id (156)][uint64_t (in network byte order) no_replay, the packet will only be accepted if this number is bigger than the last one received][our dht public key][(maximum of 4) packed nodes format with TCP so that the friend can connect to us]
@@ -228,7 +228,16 @@ Why another round of encryption? We have to prove to the receiver that we own th
 
 The no_replay number is protection if someone tries to replay an older packet and should be set to an always increasing number. It is 8 bytes so you should set a high resolution monotonic time as the value.
 
-We send this packet every 30 seconds if there is more than one peer (in the 8) that says they our friend is announced on them. This packet can also be sent through the DHT module as a DHT routed request packet (see DHT) if we know the DHT public key of the friend and are looking for them in the DHT but have not connected to them yet.
+We send this packet every 30 seconds if there is more than one peer (in the 8) that says they our friend is announced on them. This packet can also be sent through the DHT module as a DHT request packet (see DHT) if we know the DHT public key of the friend and are looking for them in the DHT but have not connected to them yet. 
+
+When sent as a DHT request packet (this is the data sent in the DHT request packet):
+[uint8_t packet id (156)][long term public key of sender][24 byte nonce][Encrypted with long term private key of sender, the long term public key of receiver and the nonce:[DHT public key packet]]
+
+When sent as a DHT request packet the DHT public key packet is (before being sent as the data of a DHT request packet) encrypted with the long term keys of both the sender and receiver and put in that format. This is done for the same reason as the double encryption of the onion data packet.
+
+Toxcore tries to resend this packet through the DHT every 20 seconds.
+
+Toxcore has a DHT request packet handler that passes received DHT public key packets from the DHT module to this module.
 
 If we receive a DHT public key packet, we will first check if the DHT packet is from a friend, if it is not from a friend, it will be discarded. The no_replay will then be checked to see if it is good and no packet with a lower one was received during the session. The DHT key, the TCP nodes in the packed nodes and the DHT nodes in the packed nodes will be passed to their relevant modules. The fact that we have the DHT public key of a friend means this module has achieved its goal.
 
