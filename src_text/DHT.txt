@@ -1,19 +1,19 @@
-The DHT module takes care of finding the ip/port of peers and establishing a route them directly with UDP using hole punching if necessary. The DHT runs on UDP only and so is only used if UDP works. 
+The DHT module takes care of finding the ip/port of peers and establishing a route to them directly with UDP using hole punching if necessary. The DHT only runs on UDP and so is only used if UDP works. 
 
-Every peer in the Tox DHT has an address which is a public key called the temporary DHT public key. Temporary because it is wiped every time the tox instance is closed/restarted. Finding the DHT public key of a friend is done with the onion module. Once the DHT public key of a friend is known, the DHT is used to find them and connect directly to them via UDP.
+Every peer in the Tox DHT has an address which is a public key called the temporary DHT public key. This address is temporary and is wiped every time the tox instance is closed/restarted. The DHT public key of a friend is found using the onion module. Once the DHT public key of a friend is known, the DHT is used to find them and connect directly to them via UDP.
 
-The DHT is a self organizing swarm of all peers in the Tox network that work on the UDP protocol. Self organizing because each peer in the DHT connects to the X peers (32 in the toxcore implementation) closest to their own DHT public key. This closeness is defined by a distance function. The distance between 2 peers can be defined as the XOR between the 2 DHT public keys which are 32 byte numbers in big endian format. The smaller this distance, the closer the peers are said to be.
+The DHT is a self-organizing swarm of all peers in the Tox network which uses the UDP protocol. Self-organizing occurs through each peer in the DHT connecting to the X number of peers, 32 in the toxcore implementation, closest to their own DHT public key. This closeness is defined by a distance function. The distance between 2 peers can be defined as the XOR between the 2 DHT public keys which are 32 byte numbers in big endian format. The smaller this distance, the closer the peers are said to be.
 
 A DHT peer with public key 1 would be closer to one with public key 0 than one with public key 5 for example because: 1 XOR 0 = 1 and 1 XOR 5 = 4. Since 1 is smaller it means 1 is closer to 0 than to 5.
 
-If each peer in the network knows the peers with the DHT public key closest to its DHT public key then to find a specific peer with public key X a peer just need to recursively ask peers in the DHT for the peers they know that have a DHT public key closest to X. Eventually the peer will find the peers in the DHT that are the closest to that peer and if that peer is online they will find them.
+If each peer in the network knows the peers with the DHT public key closest to its DHT public key, then to find a specific peer with public key X a peer just needs to recursively ask peers in the DHT for known peers that have the DHT public keys closest to X. Eventually the peer will find the peers in the DHT that are the closest to that peer and, if that peer is online, they will find them.
 
 Packed node format:
 [uint8_t family (2 == IPv4, 10 == IPv6, 130 == TCP IPv4, 138 == TCP IPv6)][ip (in network byte order), length=4 bytes if ipv4, 16 bytes if ipv6][port (in network byte order), length=2 bytes][char array (node_id), length=32 bytes]
 
 The packed node format is a way to store the node info in a small yet easy to parse format. To store more than one node, simply append another one to the previous one: [packed node 1][packed node 2]...
 
-The packed node format is used many places in Tox. Family numbers 2 and 10 are used to indicate an ipv4 or ipv6 UDP node. 130 and 138 are used to indicate a ipv4 or ipv6 TCP relay. The reason for these numbers is because the numbers on my machine for ipv4 and ipv6 were 2 and 10. The TCP numbers are just the UDP numbers + 128. The ip is 4 bytes for a ipv4 address (family numbers 2 and 130). The ip is 16 bytes for an ipv6 address (family numbers 10 and 138). This is followed by 32 byte the public key of the node.
+The packed node format is used in many places in Tox. Family numbers 2 and 10 are used to indicate an ipv4 or ipv6 UDP node. The number 130 is used for an ipv4 TCP relay and 138 is used to indicate an ipv6 TCP relay. The reason for these numbers is that the numbers on my machine for ipv4 and ipv6 were 2 and 10. The TCP numbers are the UDP numbers + 128. The ip is 4 bytes for a ipv4 address (family numbers 2 and 130). The ip is 16 bytes for an ipv6 address (family numbers 10 and 138). This is followed by 32 byte the public key of the node.
 
 Only the UDP numbers (2 and 10) are used in the DHT module.
 
@@ -35,36 +35,36 @@ Send_nodes (response (for all addresses)):
 
 [byte with value: 04][DHT public key of sender, length=32 bytes][random 24 byte nonce][Encrypted with the nonce and private key of the sender:[uint8_t number of nodes in this packet][Nodes in packed node format, length=?? * (number of nodes (maximum of 4 nodes)) bytes][ping_id, length=8 bytes]]
 
-The main DHT packet types are ping requests and responses which are used to check if another node is alive and get node packets which are used to query another DHT node for the up to 4 nodes they know that are the closest to the requested node .
+The main DHT packet types are ping requests and responses which are used to check if another node is alive and get node packets. These node packets are used to query another DHT node for the up to 4 nodes they know that are the closest to the requested node.
 
-The first byte of a ping request is a 0. This is then followed by the DHT public key of the sender and a nonce. The encrypted part contains a byte with the value 0 followed by a 8 byte ping ip which will be sent back in the response. The reason for the 1 byte value in the encrypted part is because the key used to encrypt both the request and response will be the same due to how the encryption works it prevents a possible attacked from being able to create a ping response without needing to decrypt the ping request. The ping id is used to make sure that the response received later is a response for this ping and not a replayed response from a previous ping.
+The first byte of a ping request is a 0. This is then followed by the DHT public key of the sender and a nonce. The encrypted part contains a byte with the value 0 followed by an 8 byte ping ip which will be sent back in the response. The reason for the 1 byte value in the encrypted part is to prevent possible attacks from being able to create a ping response without having to decrypt the ping request. This is important as the same key is used to encrypt both the request and reponse. The ping id is used to make sure that the response received is a response for this ping and not a replayed response from a previous ping.
 
-The first byte of a ping response is a 1. This is then followed by the DHT public key of the one sending the response and a random nonce. The encrypted part contains a byte with the value 1 followed by a 8 byte ping id that was sent in the ping response.
+The first byte of a ping response is a 1. This is then followed by the DHT public key of the responding peer and a random nonce. The encrypted part contains a byte with the value 1 followed by an 8 byte ping id that was sent in the ping response.
 
-All ping requests received will be decrypted. If successfully decrypted a response will be created then sent back to the same node.
+All ping requests received will be decrypted. If successfully decrypted, a response will be created then sent back to the same node.
 
-The first byte of a get node request is a 2. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the request is the DHT key that the sender is searching for or wants to find the nodes in the DHT closest to it. This is followed by an 8 byte ping id which is there for the same reason as the one for the ping request. 
+The first byte of a get node request is a 2. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the request is the DHT key that the sender is searching for or wants to find the nodes in the DHT closest to. This is followed by an 8 byte ping id which is there for the same reason as the one for the ping request. 
 
-Get node requests are responded to by send node responses. Send node responses should contain the 4 closest good (alive) nodes that the node receiving the get node knows.
+Get node requests are responded to by send node responses. Send node responses should contain the 4 closest good (alive) nodes known by the node receiving the get node request.
 
-The first byte of a send node response is a 4. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the response there is a 1 byte number which contains the number of nodes stored in the packet, up to 4 nodes in packed node format and the 8 byte ping id that was sent in the request.
+The first byte of a send node response is a 4. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the response there is a 1 byte number which contains the number of nodes stored in the packet, which can be up to 4 nodes, in packed node format and the 8 byte ping id that was sent in the request.
 
 
 
-Toxcore stores the 32 nodes closest to its DHT public key and 8 nodes closest to each of the public keys in its DHT friends list (or list of DHT public keys it actively tries to find and connect to) and pings them every 60 seconds to see if they are alive. It also sends get node requests to a random node in each of those lists of nodes every 20 seconds with the search public key being its public key for the closest node and the public key being searched for the ones in the DHT friends list. Nodes are removed after 122 seconds of no response. Nodes are only added to the lists after a valid ping response of send node packet is received from them.
+Toxcore stores the 32 nodes closest to its DHT public key and 8 nodes closest to each of the public keys in its DHT friends list (or list of DHT public keys that it actively tries to find and connect to) and pings them every 60 seconds to see if they are alive. It also sends get node requests to a random node in each of these lists of nodes every 20 seconds, with the search public key being its public key for the closest node and the public key being searched for being the ones in the DHT friends list. Nodes are removed after 122 seconds of no response. Nodes are only added to the lists after a valid ping response of send node packet is received from them.
 
-When receiving a send node packet, toxcore will check if each of the received nodes could be added to anyone of the lists. If the node can, toxcore will send a ping packet to it, if it cannot it will be ignored.
+When receiving a send node packet, toxcore will check if each of the received nodes could be added to any one of the lists. If the node can, toxcore will send a ping packet to it, if it cannot it will be ignored.
 
-When receiving a get node packet toxcore will find the 4 nodes closest to the public key in the packet in its nodes lists and send them in the send node response.
+When receiving a get node packet, toxcore will find the 4 nodes, in its nodes lists, closest to the public key in the packet and send them in the send node response.
 
-The toxcore behaviour can be improved as it is currently very basic and there is room for much improvement.
+The toxcore behaviour could be improved as it is currently very basic and there is room for much improvement.
 
 DHT Request packets:
 [char with a value of 32][The reciever's DHT Public key (32 bytes))][The sender's DHT Public key (32 bytes)][Random nonce (24 bytes)][Encrypted message]
 
 DHT Request packets are packets that can be sent across one DHT node to one that they know. They are used to send encrypted data to friends that we are not necessarily connected to directly in the DHT.
 
-A DHT node that receives a DHT request packet will look if the node with the receivers public key is their DHT public key, if it is they will decrypt and handle the packet. If it is not they will look if they know that DHT public key (if it's in their list of close nodes). If it isn't, they will drop the packet. If it is they will resend the exact packet to that DHT node.
+A DHT node that receives a DHT request packet will check whether the node with the receivers public key is their DHT public key and, if it is, they will decrypt and handle the packet. If it is not they will check whether they know that DHT public key (if it's in their list of close nodes). If it isn't, they will drop the packet. If it is they will resend the exact packet to that DHT node.
 
 The encrypted message is encrypted using the reciever's DHT Public key, the sender's DHT private key and the nonce (randomly generated 24 bytes).
 
@@ -78,32 +78,32 @@ NAT ping packets are used to see if a friend we are not connected to directly is
 
 Hole punching:
 
-For holepunching we consider that people using Tox are on 3 types of NATs:
+For holepunching we assume that people using Tox are on one of 3 types of NAT:
 
-Cone NATs: Assign one whole port to each UDP socket behind it, any packet from any ip/port sent to that assigned port from the internet will be forwarded to the socket behind it.
+Cone NATs: Assign one whole port to each UDP socket behind the NAT, any packet from any ip/port sent to that assigned port from the internet will be forwarded to the socket behind it.
 
-Restricted Cone NATs: Assign one whole port to each UDP socket behind it however will only forward packets from ips that the UDP socket has sent a packet to.
+Restricted Cone NATs: Assign one whole port to each UDP socket behind the NAT. However, it will only forward packets from ips that the UDP socket has sent a packet to.
 
 Symmetric NATs: The worst kind of NAT, they assign a new port for each ip/port a packet is sent to. They treat each new peer you send a UDP packet to as a 'connection' and will only forward packets from the ip/port of that 'connection'.
 
 
-Holepunching on normal cone NATs is achieved just by how the DHT functions.
+Holepunching on normal cone NATs is achieved simply through the way in which the DHT functions.
 
-If more than half of the 8 peers closest to the friend in the DHT return an ip/port for the friend yet the friend isn't in those 8 closest peers it means that connecting directly to the friend failed. This is because since we send ping requests to every peer that is closer than what we have in our list it means we have sent at least 4 ping requests to those ip/ports but not received a response.
+If more than half of the 8 peers closest to the friend in the DHT return an ip/port for the friend, yet the friend isn't in those 8 closest peers, it means that connecting directly to the friend failed. This is because, since we send ping requests to every peer that is closer than those in our list, we have sent at least 4 ping requests to those ip/ports but not received a response.
 
-Before starting the hole punching the peer will send a NAT ping packet to the friend via the peers that say they know the friend. If a NAT ping response with the same random number is received the hole punching will start.
+Before starting the hole punching, the peer will send a NAT ping packet to the friend via the peers that say they know the friend. If a NAT ping response with the same random number is received the hole punching will start.
 
-If a NAT ping request is received we will first check if it is from a friend. If it is not from a friend it will be dropped. If it is from a friend a response with the same 8 byte number as in the request will be sent back via the nodes that know the friend that sent the request. If no nodes from the friend are known, the packet will be dropped.
+If a NAT ping request is received, we will first check if it is from a friend. If it is not from a friend it will be dropped. If it is from a friend, a response with the same 8 byte number as in the request will be sent back via the nodes that know the friend sending the request. If no nodes from the friend are known, the packet will be dropped.
 
-Receiving a NAT ring response therefore means that the friend is both online and actively searching for us because that is the only way they would know nodes that know us. This is important because hole punching will work only if the friend is actively trying to connect to us.
+Receiving a NAT ping response therefore means that the friend is both online and actively searching for us, as that is the only way they would know nodes that know us. This is important because hole punching will work only if the friend is actively trying to connect to us.
 
-There are 2 cases that toxcore handles for the hole punching. The first case is if each 4+ peers returned the same ip and port. The second is if the The 4+ peers returned same ips but different ports. 
+There are 2 cases that toxcore handles for the hole punching. The first case is if each 4+ peers returned the same ip and port. The second is if the 4+ peers returned same ips but different ports. 
 
-A third case that may occur is to have them return different ips and ports. This can only happen if the friend is behind a very restrictive NAT that cannot be hole punched or if the peer recently connected to another internet connection and some peers still have the old one stored. Since there is nothing we can do for the first option it is recommended to just use the most common ip returned by the peers and to ignore the other ip/ports.
+A third case that may occur is the peers returning different ips and ports. This can only happen if the friend is behind a very restrictive NAT that cannot be hole punched or if the peer recently connected to another internet connection and some peers still have the old one stored. Since there is nothing we can do for the first option it is recommended to just use the most common ip returned by the peers and to ignore the other ip/ports.
 
-For the case where the peers return the same ip and port it means that the other friend is on a restricted cone NAT. These kind of NATs can be hole punched by getting the friend to send us a packet to our public IP/port. This means that hole punching can be achieved easily and that we should just continue sending DHT ping packets regularly to that ip/port until we get a ping response. This will work because the friend is searching for us in the DHT and will find us and will send us a packet to our public IP/port (or try to with the hole punching) therby establishing a connection.
+In the case where the peers return the same ip and port it means that the other friend is on a restricted cone NAT. These kind of NATs can be hole punched by getting the friend to send a packet to our public IP/port. This means that hole punching can be achieved easily and that we should just continue sending DHT ping packets regularly to that ip/port until we get a ping response. This will work because the friend is searching for us in the DHT and will find us and will send us a packet to our public IP/port (or try to with the hole punching), thereby establishing a connection.
 
-For the case where peers do not return the same ports, this means that the other peer is on a symmetric NAT. Some symmetric NATs open ports in sequences so the ports returned by the other peers might be something like: 1345, 1347, 1389, 1395. The method to hole punch these NATs is to try to guess which ports are more likely to be used by the other peer when they try sending us ping requests and send some ping requests to these ports. Toxcore just tries all the ports beside each returned port (ex: for the 4 ports previously it would try: 1345, 1347, 1389, 1395, 1346, 1348, 1390, 1396, 1344, 1346...) getting gradually further and further away and this works but could be improved. When using this method toxcore will try up to 48 ports every 3 seconds until both connect. After 5 tries toxcore doubles this and starts trying ports from 1024 (48 each time) along with the previous port guessing. This is because I have noticed that this seemed to fix it for some symmetric NATs most likely because a lot of them restart their count at 1024.
+For the case where peers do not return the same ports, this means that the other peer is on a symmetric NAT. Some symmetric NATs open ports in sequences so the ports returned by the other peers might be something like: 1345, 1347, 1389, 1395. The method to hole punch these NATs is to try to guess which ports are more likely to be used by the other peer when they try sending us ping requests and send some ping requests to these ports. Toxcore just tries all the ports beside each returned port (ex: for the 4 ports previously it would try: 1345, 1347, 1389, 1395, 1346, 1348, 1390, 1396, 1344, 1346...) getting gradually further and further away and, although this works, the method could be improved. When using this method toxcore will try up to 48 ports every 3 seconds until both connect. After 5 tries toxcore doubles this and starts trying ports from 1024 (48 each time) along with the previous port guessing. This is because I have noticed that this seemed to fix it for some symmetric NATs, most likely because a lot of them restart their count at 1024.
 
-This works in cases where both peers have different NATs. For example if A and B are trying to connect together. A has a symmetric NAT and B a restricted cone NAT. A will detect that B has a restricted cone NAT and keep sending ping packets to his one ip/port. B will detect that A has a symmetric NAT and will send packets to it to try guessing his ports. If B manages to guess the port A is sending packets from they will connect together.
+This works in cases where both peers have different NATs. For example, if A and B are trying to connect together: A has a symmetric NAT and B a restricted cone NAT. A will detect that B has a restricted cone NAT and keep sending ping packets to his one ip/port. B will detect that A has a symmetric NAT and will send packets to it to try guessing his ports. If B manages to guess the port A is sending packets from they will connect together.
 
