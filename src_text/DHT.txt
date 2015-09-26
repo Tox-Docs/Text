@@ -13,7 +13,7 @@ Packed node format:
 
 The packed node format is a way to store the node info in a small yet easy to parse format. To store more than one node, simply append another one to the previous one: [packed node 1][packed node 2]...
 
-The packed node format is used many places in Tox. Family numbers 2 and 10 are used to indicate an ipv4 or ipv6 UDP node. 130 and 138 are used to indicate a ipv4 or ipv6 TCP relay. The reason for these numbers is because the numbers on my Linux machine for ipv4 and ipv6 (the AF_INET and AF_INET6 defines) were 2 and 10. The TCP numbers are just the UDP numbers + 128. The ip is 4 bytes for a ipv4 address (ip_type numbers 2 and 130). The ip is 16 bytes for an ipv6 address (ip_type numbers 10 and 138). This is followed by 32 byte the public key of the node.
+The packed node format is used many places in Tox. ip_type numbers 2 and 10 are used to indicate an ipv4 or ipv6 UDP node. 130 and 138 are used to indicate a ipv4 or ipv6 TCP relay. The reason for these numbers is because the numbers on my Linux machine for ipv4 and ipv6 (the AF_INET and AF_INET6 defines) were 2 and 10. The TCP numbers are just the UDP numbers + 128. The ip is 4 bytes for a ipv4 address (ip_type numbers 2 and 130). The ip is 16 bytes for an ipv6 address (ip_type numbers 10 and 138). This is followed by 32 byte the public key of the node.
 
 Only the UDP ip_types (ip_type 2 and ip_type 10) are used in the DHT module when sending nodes with the packed node format. This is because the TCP ip_types are used to send TCP relay information and the DHT is UDP only.
 
@@ -41,7 +41,7 @@ Valid replies: a send_nodes packet
 
 The first byte of a get node request is a 2. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the request is the DHT key that the sender is searching for or wants to find the nodes in the DHT closest to it. This is followed by an 8 byte ping id which is there for the same reason as the one for the ping request. 
 
-Get node requests are responded to by send node responses. Send node responses should contain the 4 closest good (alive) nodes that the node receiving the get node knows.
+Get node requests are responded to by send node responses. Send node responses should contain the 4 closest good (not timed out) nodes that the node receiving the get node has in their list of known nodes.
 
 Send_nodes (response): 
 
@@ -50,7 +50,7 @@ Send_nodes (response):
 The first byte of a send node response is a 4. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the response there is a 1 byte number which contains the number of nodes stored in the packet, up to 4 nodes in packed node format and the 8 byte ping id that was sent in the request.
 
 
-Toxcore stores the 32 nodes closest to its DHT public key and 8 nodes closest to each of the public keys in its DHT friends list (or list of DHT public keys it actively tries to find and connect to) and pings them every 60 seconds to see if they are alive. It also sends get node requests to a random node in each of those lists of nodes every 20 seconds with the search public key being its public key for the closest node and the public key being searched for the ones in the DHT friends list. Nodes are removed after 122 seconds of no response. Nodes are only added to the lists after a valid ping response of send node packet is received from them.
+Toxcore stores the 32 nodes closest to its DHT public key and 8 nodes closest to each of the public keys in its DHT friends list (or list of DHT public keys it actively tries to find and connect to) and pings them every 60 seconds to see if they are alive. It also sends get node requests to a random node in each of those lists of nodes every 20 seconds with the search public key being its public key for the closest node and the public key being searched for the ones in the DHT friends list. Nodes are removed after 122 seconds of no response. Nodes are only added to the lists after a valid ping response or send node packet is received from them.
 
 When receiving a send node packet, toxcore will check if each of the received nodes could be added to anyone of the lists. If the node can, toxcore will send a ping packet to it, if it cannot it will be ignored.
 
