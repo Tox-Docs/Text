@@ -9,13 +9,13 @@ A DHT peer with public key 1 would be closer to one with public key 0 than one w
 If each peer in the network knows the peers with the DHT public key closest to its DHT public key then to find a specific peer with public key X a peer just need to recursively ask peers in the DHT for the peers they know that have a DHT public key closest to X. Eventually the peer will find the peers in the DHT that are the closest to that peer and if that peer is online they will find them.
 
 Packed node format:
-[uint8_t family (2 == IPv4, 10 == IPv6, 130 == TCP IPv4, 138 == TCP IPv6)][ip (in network byte order), length=4 bytes if ipv4, 16 bytes if ipv6][port (in network byte order), length=2 bytes][char array (node_id), length=32 bytes]
+[uint8_t ip_type (2 == IPv4, 10 == IPv6, 130 == TCP IPv4, 138 == TCP IPv6. First bit = protocol (0 is UDP, 1 is TCP), 3 bits = nothing, 4 bits = address family))][ip (in network byte order), length=4 bytes if ipv4, 16 bytes if ipv6][port (in network byte order), length=2 bytes][char array (node_id), length=32 bytes]
 
 The packed node format is a way to store the node info in a small yet easy to parse format. To store more than one node, simply append another one to the previous one: [packed node 1][packed node 2]...
 
-The packed node format is used many places in Tox. Family numbers 2 and 10 are used to indicate an ipv4 or ipv6 UDP node. 130 and 138 are used to indicate a ipv4 or ipv6 TCP relay. The reason for these numbers is because the numbers on my machine for ipv4 and ipv6 were 2 and 10. The TCP numbers are just the UDP numbers + 128. The ip is 4 bytes for a ipv4 address (family numbers 2 and 130). The ip is 16 bytes for an ipv6 address (family numbers 10 and 138). This is followed by 32 byte the public key of the node.
+The packed node format is used many places in Tox. Family numbers 2 and 10 are used to indicate an ipv4 or ipv6 UDP node. 130 and 138 are used to indicate a ipv4 or ipv6 TCP relay. The reason for these numbers is because the numbers on my Linux machine for ipv4 and ipv6 (the AF_INET and AF_INET6 defines) were 2 and 10. The TCP numbers are just the UDP numbers + 128. The ip is 4 bytes for a ipv4 address (ip_type numbers 2 and 130). The ip is 16 bytes for an ipv6 address (ip_type numbers 10 and 138). This is followed by 32 byte the public key of the node.
 
-Only the UDP numbers (2 and 10) are used in the DHT module.
+Only the UDP ip_types (ip_type 2 and ip_type 10) are used in the DHT module when sending nodes with the packed node format. This is because the TCP ip_types are used to send TCP relay information and the DHT is UDP only.
 
 
 Ping(Request and response): 
@@ -24,6 +24,14 @@ Ping(Request and response):
 
 ping_id = an 8 byte number, the response must contain the exact same number as the request.
 
+The main DHT packet types are ping requests and responses which are used to check if another node is alive and get node packets which are used to query another DHT node for the up to 4 nodes they know that are the closest to the requested node .
+
+The first byte of a ping request is a 0. This is then followed by the DHT public key of the sender and a nonce. The encrypted part contains a byte with the value 0 followed by a 8 byte ping ip which will be sent back in the response. The reason for the 1 byte value in the encrypted part is because the key used to encrypt both the request and response will be the same due to how the encryption works it prevents a possible attacked from being able to create a ping response without needing to decrypt the ping request. The ping id is used to make sure that the response received later is a response for this ping and not a replayed response from a previous ping which would have allowed an attacker to make the ping sender believe that the node they are pinging is still up. The ping_id is also used so that a node can't just send ping response packets to the node in order to make the DHT module implementation reset its timeout, it makes sure the node has to actually receive the request packet before sending a response.
+
+
+The first byte of a ping response is a 1. This is then followed by the DHT public key of the one sending the response and a random nonce. The encrypted part contains a byte with the value 1 followed by a 8 byte ping id that was sent in the ping response.
+
+All ping requests received will be decrypted. If successfully decrypted a response will be created then sent back to the same node.
 
 Get nodes (Request):
 Packet contents: 
@@ -31,24 +39,15 @@ Packet contents:
 
 Valid replies: a send_nodes packet
 
-Send_nodes (response (for all addresses)): 
-
-[byte with value: 04][DHT public key of sender, length=32 bytes][random 24 byte nonce][Encrypted with the nonce and private key of the sender:[uint8_t number of nodes in this packet][Nodes in packed node format, length=?? * (number of nodes (maximum of 4 nodes)) bytes][ping_id, length=8 bytes]]
-
-The main DHT packet types are ping requests and responses which are used to check if another node is alive and get node packets which are used to query another DHT node for the up to 4 nodes they know that are the closest to the requested node .
-
-The first byte of a ping request is a 0. This is then followed by the DHT public key of the sender and a nonce. The encrypted part contains a byte with the value 0 followed by a 8 byte ping ip which will be sent back in the response. The reason for the 1 byte value in the encrypted part is because the key used to encrypt both the request and response will be the same due to how the encryption works it prevents a possible attacked from being able to create a ping response without needing to decrypt the ping request. The ping id is used to make sure that the response received later is a response for this ping and not a replayed response from a previous ping.
-
-The first byte of a ping response is a 1. This is then followed by the DHT public key of the one sending the response and a random nonce. The encrypted part contains a byte with the value 1 followed by a 8 byte ping id that was sent in the ping response.
-
-All ping requests received will be decrypted. If successfully decrypted a response will be created then sent back to the same node.
-
 The first byte of a get node request is a 2. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the request is the DHT key that the sender is searching for or wants to find the nodes in the DHT closest to it. This is followed by an 8 byte ping id which is there for the same reason as the one for the ping request. 
 
 Get node requests are responded to by send node responses. Send node responses should contain the 4 closest good (alive) nodes that the node receiving the get node knows.
 
-The first byte of a send node response is a 4. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the response there is a 1 byte number which contains the number of nodes stored in the packet, up to 4 nodes in packed node format and the 8 byte ping id that was sent in the request.
+Send_nodes (response): 
 
+[byte with value: 04][DHT public key of sender, length=32 bytes][random 24 byte nonce][Encrypted with the nonce and private key of the sender:[uint8_t number of nodes in this packet][Nodes in packed node format, length=?? * (number of nodes (maximum of 4 nodes)) bytes][ping_id, length=8 bytes]]
+
+The first byte of a send node response is a 4. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the response there is a 1 byte number which contains the number of nodes stored in the packet, up to 4 nodes in packed node format and the 8 byte ping id that was sent in the request.
 
 
 Toxcore stores the 32 nodes closest to its DHT public key and 8 nodes closest to each of the public keys in its DHT friends list (or list of DHT public keys it actively tries to find and connect to) and pings them every 60 seconds to see if they are alive. It also sends get node requests to a random node in each of those lists of nodes every 20 seconds with the search public key being its public key for the closest node and the public key being searched for the ones in the DHT friends list. Nodes are removed after 122 seconds of no response. Nodes are only added to the lists after a valid ping response of send node packet is received from them.
