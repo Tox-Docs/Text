@@ -69,7 +69,7 @@ The encrypted message is encrypted using the reciever's DHT Public key, the send
 
 DHT request packets are used for DHTPK packets (see onion) and NAT ping packets.
 
-NAT ping packets:
+NAT ping packets (This sits inside the DHT request packet):
 [uint8_t with a value of 254][char with 0][8 byte random number]
 [uint8_t with a value of 254][char with 1][8 byte random number (The same that was sent in the request)]
 
@@ -77,7 +77,7 @@ NAT ping packets are used to see if a friend we are not connected to directly is
 
 Hole punching:
 
-For holepunching we consider that people using Tox are on 3 types of NATs:
+For holepunching we consider that people using Tox could be on either of 3 types of NATs:
 
 Cone NATs: Assign one whole port to each UDP socket behind it, any packet from any ip/port sent to that assigned port from the internet will be forwarded to the socket behind it.
 
@@ -88,7 +88,7 @@ Symmetric NATs: The worst kind of NAT, they assign a new port for each ip/port a
 
 Holepunching on normal cone NATs is achieved just by how the DHT functions.
 
-If more than half of the 8 peers closest to the friend in the DHT return an ip/port for the friend yet the friend isn't in those 8 closest peers it means that connecting directly to the friend failed. This is because since we send ping requests to every peer that is closer than what we have in our list it means we have sent at least 4 ping requests to those ip/ports but not received a response.
+If more than half of the 8 peers closest to the friend in the DHT return an ip/port for the friend and we send a ping request to each of the returned ip/ports but get no response. If we have sent 4 ping requests to 4 ip/ports that supposedly belong to the friend and get no response, then this is enough for toxcore to start the hole punching. The numbers 8 and 4 are used in toxcore and where chosen based on feel alone and so may not be the best numbers.
 
 Before starting the hole punching the peer will send a NAT ping packet to the friend via the peers that say they know the friend. If a NAT ping response with the same random number is received the hole punching will start.
 
