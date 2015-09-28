@@ -52,11 +52,17 @@ The first byte of a send node response is a 4. This is then followed by the DHT 
 
 Toxcore stores the 32 nodes closest to its DHT public key and 8 nodes closest to each of the public keys in its DHT friends list (or list of DHT public keys it actively tries to find and connect to) and pings them every 60 seconds to see if they are alive. It also sends get node requests to a random node in each of those lists of nodes every 20 seconds with the search public key being its public key for the closest node and the public key being searched for the ones in the DHT friends list. Nodes are removed after 122 seconds of no response. Nodes are only added to the lists after a valid ping response or send node packet is received from them.
 
+If the 32 nodes number where increased, it would increase the amount of packets needed to check if each of them are still alive which would increase the bandwidth usage but reliability would go up. If the number of nodes were decreased, reliability would go down along with bandwidth usage. The reason for this relationship between reliability and number of nodes is that if we assume that not every node has its UDP ports open or is behind a cone NAT it means that each of these nodes must be able to store a certain number of nodes behind restrictive NATs in order for others to be able to find those nodes behind restrictive NATs. For example if 7/8 nodes were behind restrictive NATs, using 8 nodes would not be enough because the chances of some of these nodes being impossible to find in the network would be too high.
+
+If the ping timeouts and delays between pings were higher it would decrease the bandwidth usage but increase the amount of disconnected nodes that are still being stored in the lists. Decreasing these delays would do the opposite.
+
+If the 8 nodes closest to each public key were increased to 16 it would increase the bandwidth usage, might increase hole punching efficiency on symmetric NATs (more ports to guess from, see Hole punching) and might increase the reliability. Lowering this number would have the opposite effect.
+
 When receiving a send node packet, toxcore will check if each of the received nodes could be added to anyone of the lists. If the node can, toxcore will send a ping packet to it, if it cannot it will be ignored.
 
 When receiving a get node packet toxcore will find the 4 nodes closest to the public key in the packet in its nodes lists and send them in the send node response.
 
-The toxcore behaviour can be improved as it is currently very basic and there is room for much improvement.
+The timeouts and number of nodes in lists for toxcore where picked by feeling alone and are probably not the best values. This also applies to the behavior which is simple and should be improved in order to make the network resist better to sybil attacks.
 
 DHT Request packets:
 [char with a value of 32][The reciever's DHT Public key (32 bytes))][The sender's DHT Public key (32 bytes)][Random nonce (24 bytes)][Encrypted message]
@@ -94,7 +100,9 @@ Before starting the hole punching the peer will send a NAT ping packet to the fr
 
 If a NAT ping request is received we will first check if it is from a friend. If it is not from a friend it will be dropped. If it is from a friend a response with the same 8 byte number as in the request will be sent back via the nodes that know the friend that sent the request. If no nodes from the friend are known, the packet will be dropped.
 
-Receiving a NAT ring response therefore means that the friend is both online and actively searching for us because that is the only way they would know nodes that know us. This is important because hole punching will work only if the friend is actively trying to connect to us.
+Receiving a NAT ping response therefore means that the friend is both online and actively searching for us because that is the only way they would know nodes that know us. This is important because hole punching will work only if the friend is actively trying to connect to us.
+
+NAT ping requests are sent every 3 seconds in toxcore, if no response is received for 6 seconds, the hole punching will stop. Sending them in longer intervals might increase the possibility of the other node going offline and ping packets sent in the hole punching being sent to a dead peer but decrease bandwidth usage. Decreasing the intervals will have the opposite effect.
 
 There are 2 cases that toxcore handles for the hole punching. The first case is if each 4+ peers returned the same ip and port. The second is if the The 4+ peers returned same ips but different ports. 
 
@@ -103,6 +111,8 @@ A third case that may occur is to have them return different ips and ports. This
 For the case where the peers return the same ip and port it means that the other friend is on a restricted cone NAT. These kind of NATs can be hole punched by getting the friend to send us a packet to our public IP/port. This means that hole punching can be achieved easily and that we should just continue sending DHT ping packets regularly to that ip/port until we get a ping response. This will work because the friend is searching for us in the DHT and will find us and will send us a packet to our public IP/port (or try to with the hole punching) therby establishing a connection.
 
 For the case where peers do not return the same ports, this means that the other peer is on a symmetric NAT. Some symmetric NATs open ports in sequences so the ports returned by the other peers might be something like: 1345, 1347, 1389, 1395. The method to hole punch these NATs is to try to guess which ports are more likely to be used by the other peer when they try sending us ping requests and send some ping requests to these ports. Toxcore just tries all the ports beside each returned port (ex: for the 4 ports previously it would try: 1345, 1347, 1389, 1395, 1346, 1348, 1390, 1396, 1344, 1346...) getting gradually further and further away and this works but could be improved. When using this method toxcore will try up to 48 ports every 3 seconds until both connect. After 5 tries toxcore doubles this and starts trying ports from 1024 (48 each time) along with the previous port guessing. This is because I have noticed that this seemed to fix it for some symmetric NATs most likely because a lot of them restart their count at 1024.
+
+Increasing the amount of ports tried per second would make the hole punching go faster but might DoS NATs due to the large number of packets being sent to different ips in a short amount of time. Decreasing it would make the hole punching slower.
 
 This works in cases where both peers have different NATs. For example if A and B are trying to connect together. A has a symmetric NAT and B a restricted cone NAT. A will detect that B has a restricted cone NAT and keep sending ping packets to his one ip/port. B will detect that A has a symmetric NAT and will send packets to it to try guessing his ports. If B manages to guess the port A is sending packets from they will connect together.
 
