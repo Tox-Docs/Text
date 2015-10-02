@@ -1,35 +1,93 @@
-The TCP server in tox has the goal of acting like a TCP relay between clients who cannot connect directly to each other or who for some reason are limited to using the TCP protocol to connect to each other. TCP_server is typically run only on actual server machines but any Tox client could host one as the api to run one is exposed through the tox.h api.
+The TCP server in tox has the goal of acting like a TCP relay between clients
+who cannot connect directly to each other or who for some reason are limited
+to using the TCP protocol to connect to each other. TCP_server is typically
+run only on actual server machines but any Tox client could host one as the
+api to run one is exposed through the tox.h api.
 
 To connect to a hosted TCP server toxcore uses the TCP client module.
 
-The TCP server implementation in toxcore can currently either work on epoll on linux or using unoptimized but portable socket polling.
+The TCP server implementation in toxcore can currently either work on epoll on
+linux or using unoptimized but portable socket polling.
 
-TCP connections between the TCP client and the server are encrypted to prevent an outsider from knowing information like who is connecting to who just be looking at someones connection to a TCP server. This is useful when someone connects though something like Tor for example. It also prevents someone from injecting data in the stream and makes it so we can assume that any data received was not tampered with and is exactly what was sent by the client.
+TCP connections between the TCP client and the server are encrypted to prevent
+an outsider from knowing information like who is connecting to who just be
+looking at someones connection to a TCP server. This is useful when someone
+connects though something like Tor for example. It also prevents someone from
+injecting data in the stream and makes it so we can assume that any data
+received was not tampered with and is exactly what was sent by the client.
 
-When a client first connects to a TCP server he opens up a TCP connection to the ip and port the TCP server is listening on. Once the connection is established he then sends a handshake packet, the server then responds with his own and a secure connection is established. The connection is then said to be unconfirmed and the client must then send some encrypted data to the server before the server can mark the connection as confirmed. The reason it works like this is to prevent a type of attack where a peer would send a handshake packet and then time out right away.To prevent this the server must wait for a sign that the client received his handshake packet before confirming the connection. The both can then communicate with each other using n encrypted connection.
+When a client first connects to a TCP server he opens up a TCP connection to
+the ip and port the TCP server is listening on. Once the connection is
+established he then sends a handshake packet, the server then responds with
+his own and a secure connection is established. The connection is then said to
+be unconfirmed and the client must then send some encrypted data to the server
+before the server can mark the connection as confirmed. The reason it works
+like this is to prevent a type of attack where a peer would send a handshake
+packet and then time out right away.To prevent this the server must wait for a
+sign that the client received his handshake packet before confirming the
+connection. The both can then communicate with each other using n encrypted
+connection.
 
-The TCP server essentially acts as just a relay between 2 peers. When a TCP client connects to the server he tells the server which clients he wants the server to connect him to. The server will only let two clients connect to each other if both have indicated to the server that they want to connect to each other. This is to prevent non friends from checking if someone is connected to a TCP server. The TCP server supports sending packets blindly through it to clients with a client with public key X (OOB packets) however the TCP server does not give any feedback or anything to say if the packet arrived or not and as such it is only useful to send data to friends who may not know that we are connected to the current TCP server while we know they are.
+The TCP server essentially acts as just a relay between 2 peers. When a TCP
+client connects to the server he tells the server which clients he wants the
+server to connect him to. The server will only let two clients connect to each
+other if both have indicated to the server that they want to connect to each
+other. This is to prevent non friends from checking if someone is connected to
+a TCP server. The TCP server supports sending packets blindly through it to
+clients with a client with public key X (OOB packets) however the TCP server
+does not give any feedback or anything to say if the packet arrived or not and
+as such it is only useful to send data to friends who may not know that we are
+connected to the current TCP server while we know they are.
 
-In order to make toxcore work on TCP only the TCP server supports relaying onion packets from TCP clients and sending any responses from them to TCP clients.
+In order to make toxcore work on TCP only the TCP server supports relaying
+onion packets from TCP clients and sending any responses from them to TCP
+clients.
 
-To establish a secure connection with a TCP server send the following 128 bytes of data to the server:
+To establish a secure connection with a TCP server send the following 128
+bytes of data to the server:
 
 [public key of client (32 bytes)][nonce for the encrypted data [24 bytes]][encrypted with the private key of the client and public key of the server and the nonce:[public key (32 bytes) and][base nonce we want the server to use to encrypt the packets sent to us (24 bytes)]]
 
 
-The first 32 bytes are the public key that we are announcing ourselves to the server to. The next 24 bytes are a nonce which we use along with the secret key associated with the public key in the first 32 bytes of the packet to encrypt the rest of this 'packet'. The encrypted part of this packet contains a temporary public key that will be used for encryption during the connection and will be discarded after. It also contains a base nonce.
+The first 32 bytes are the public key that we are announcing ourselves to the
+server to. The next 24 bytes are a nonce which we use along with the secret
+key associated with the public key in the first 32 bytes of the packet to
+encrypt the rest of this 'packet'. The encrypted part of this packet contains
+a temporary public key that will be used for encryption during the connection
+and will be discarded after. It also contains a base nonce.
 
-If the server decrypts successfully the encrypted data in the handshake packet and responds with the following of length 96 bytes:
+If the server decrypts successfully the encrypted data in the handshake packet
+and responds with the following of length 96 bytes:
 
 [nonce for the encrypted data [24 bytes]][encrypted with the public key of the client and private key of the server and the nonce:[public key (32 bytes) and][base nonce we want the client to use to encrypt the packets sent to us (24 bytes)]]
 
-The client already knows the long term public key of the server so it is omitted in the response, instead only a nonce is present in the unencrypted part. The encrypted part of the response has the same elements as the encrypted part of the request: a temporary public key tied to this connection and a base nonce both unique for the connection.
+The client already knows the long term public key of the server so it is
+omitted in the response, instead only a nonce is present in the unencrypted
+part. The encrypted part of the response has the same elements as the
+encrypted part of the request: a temporary public key tied to this connection
+and a base nonce both unique for the connection.
 
-After this the client will know the connection temporary public key and base nonce of the server and the server will know the connection base nonce and temporary public key of the client.
+After this the client will know the connection temporary public key and base
+nonce of the server and the server will know the connection base nonce and
+temporary public key of the client.
 
-The client will then send an encrypted packet to the server, the contents of the packet do not matter and it must be handled normally by the server (ex: if it was a ping send a pong response), the only thing that does matter is that the packet was encrypted correctly by the client because it means that the client has correctly received the handshake response the server sent to it and that the handshake the client sent to the server really came from the client and not from an attacker replaying packets. The server must prevent resource consuming attacks by timing out clients if they do not send any encrypted packets so the server to prove to the server that the connection was established correctly.
+The client will then send an encrypted packet to the server, the contents of
+the packet do not matter and it must be handled normally by the server (ex: if
+it was a ping send a pong response), the only thing that does matter is that
+the packet was encrypted correctly by the client because it means that the
+client has correctly received the handshake response the server sent to it and
+that the handshake the client sent to the server really came from the client
+and not from an attacker replaying packets. The server must prevent resource
+consuming attacks by timing out clients if they do not send any encrypted
+packets so the server to prove to the server that the connection was
+established correctly.
 
-When the server confirms the connection he must look in the list of connected peers to see if he is already connected to a client with the same announced public key. If this is the case the server must kill the previous connection because this means that the client previously timed out and is reconnecting. Because of Toxcore design it will not happen that two legitimate different peers will have the same public key so this is the correct behavior.
+When the server confirms the connection he must look in the list of connected
+peers to see if he is already connected to a client with the same announced
+public key. If this is the case the server must kill the previous connection
+because this means that the client previously timed out and is reconnecting.
+Because of Toxcore design it will not happen that two legitimate different
+peers will have the same public key so this is the correct behavior.
 
 
 Encrypted packets look like this to outsiders:
@@ -38,7 +96,11 @@ Encrypted packets look like this to outsiders:
 In a TCP stream they would look like:
 [[uint16_t (length of data)][encrypted data]][[uint16_t (length of data)][encrypted data]][[uint16_t (length of data)][encrypted data]]...
 
-Both the client and server use the following (temp public and private (client and server) connection keys) which are each generated for the connection and then sent to the other in the handshake and sent to the other. They are then used like the next diagram shows to generate a shared key which is equal on both sides.
+Both the client and server use the following (temp public and private (client
+and server) connection keys) which are each generated for the connection and
+then sent to the other in the handshake and sent to the other. They are then
+used like the next diagram shows to generate a shared key which is equal on
+both sides.
 
 Client:                                     Server:
 generate_shared_key(                        generate_shared_key(
@@ -47,43 +109,74 @@ generate_shared_key(                        generate_shared_key(
 =                                           =
 [shared key]                                [shared key]
 
-The generated shared key is equal on both sides and is used to encrypt and decrypt the encrypted data packets.
+The generated shared key is equal on both sides and is used to encrypt and
+decrypt the encrypted data packets.
 
-each encrypted data packet sent to the client will be encrypted with the shared key and with a nonce equal to: (client base nonce + number of packets sent so for the first packet it is (starting at 0) nonce + 0, the second is nonce + 1 and so on. Note that nonces like all other numbers sent over the network in toxcore are numbers in big endian format so when increasing them by 1 the least significant byte is the last one)
+each encrypted data packet sent to the client will be encrypted with the
+shared key and with a nonce equal to: (client base nonce + number of packets
+sent so for the first packet it is (starting at 0) nonce + 0, the second is
+nonce + 1 and so on. Note that nonces like all other numbers sent over the
+network in toxcore are numbers in big endian format so when increasing them by
+1 the least significant byte is the last one)
 
-each packet received from the client will be decrypted with the shared key and with a nonce equal to: (server base nonce + number of packets sent so for the first packet it is (starting at 0) nonce + 0, the second is nonce + 1 and so on. Note that nonces like all other numbers sent over the network in toxcore are numbers in big endian format so when increasing them by 1 the least significant byte is the last one)
+each packet received from the client will be decrypted with the shared key and
+with a nonce equal to: (server base nonce + number of packets sent so for the
+first packet it is (starting at 0) nonce + 0, the second is nonce + 1 and so
+on. Note that nonces like all other numbers sent over the network in toxcore
+are numbers in big endian format so when increasing them by 1 the least
+significant byte is the last one)
 
-Encrypted packets have a hard maximum size of 2048 in the toxcore TCP server implementation, 2048 is big enough to make sure that all toxcore packets can go through and leaves some extra space just in case.
+Encrypted packets have a hard maximum size of 2048 in the toxcore TCP server
+implementation, 2048 is big enough to make sure that all toxcore packets can
+go through and leaves some extra space just in case.
 
 
 The logic behind the format of the handshake is that we:
-1. need to prove to the server that we own the private key related to the public key we are announcing ourselves with.
+1. need to prove to the server that we own the private key related to the
+   public key we are announcing ourselves with.
 2. need to establish a secure connection that has perfect forward secrecy
 3. prevent any replay, impersonation or other attacks
 
 How it accomplishes each of those points:
-1. If the client does not own the private key related to the public key they will not be able to create the handshake packet.
-2. temporary session keys generated by the client and server in the encrypted part of the handshake packets are used to encrypt/decrypt packets during the session.
-3. a. Attacker modifies any byte of the handshake packets: Decryption fail, no attacks possible
-   b. Attacker captures the handshake packet from the client and replays it later to the server: Attacker will never get the server to confirm the connection (no effect)
-   c. Attacker captures a server response and sends it to the client next time they try to connect to the server: Client will never confirm the connection. (See: TCP_client)
-   d. Attacker tries to impersonate a server: They won't be able to decrypt the handshake and won't be able to respond.
-   e. Attacker tries to impersonate a client: Server won't be able to decrypt the handshake.
+1. If the client does not own the private key related to the public key they
+   will not be able to create the handshake packet.
+2. temporary session keys generated by the client and server in the encrypted
+   part of the handshake packets are used to encrypt/decrypt packets during the
+   session.
+3. a. Attacker modifies any byte of the handshake packets: Decryption fail, no
+      attacks possible
+   b. Attacker captures the handshake packet from the client and replays it
+      later to the server: Attacker will never get the server to confirm the
+      connection (no effect)
+   c. Attacker captures a server response and sends it to the client next time
+      they try to connect to the server: Client will never confirm the
+      connection. (See: TCP_client)
+   d. Attacker tries to impersonate a server: They won't be able to decrypt
+      the handshake and won't be able to respond.
+   e. Attacker tries to impersonate a client: Server won't be able to decrypt
+      the handshake.
 
 The logic behind the format of the encrypted packets is that:
 1. TCP is a stream protocol, we need packets.
 2. Any attacks must be prevented
 
 How it accomplishes each of those points:
-1. 2 bytes before each packet of encrypted data denote the length. We assume a functioning TCP will deliver bytes in order which makes it work. If the TCP doesn't it most likely means it is under attack and for that see the next point.
-2. a. Modifying the length bytes will either make the connection time out and/or decryption fail.
+1. 2 bytes before each packet of encrypted data denote the length. We assume a
+   functioning TCP will deliver bytes in order which makes it work. If the TCP
+   doesn't it most likely means it is under attack and for that see the next
+   point.
+2. a. Modifying the length bytes will either make the connection time out
+      and/or decryption fail.
    b. Modifying any encrypted bytes will make decryption fail.
    c. Injecting any bytes will make decryption fail.
-   d. Trying to re order the packets will make decryption fail because of the ordered nonce.
-   c. Removing any packets from the stream will make decryption fail because of the ordered nonce.
+   d. Trying to re order the packets will make decryption fail because of the
+      ordered nonce.
+   c. Removing any packets from the stream will make decryption fail because
+      of the ordered nonce.
 
 
-The folowing represents the various types of data that can be sent inside encrypted data packets.
+The folowing represents the various types of data that can be sent inside
+encrypted data packets.
 //TODO: nice graphics
 
 0 - Routing request.
@@ -107,39 +200,82 @@ The folowing represents the various types of data that can be sent inside encryp
 16 and up - Data
 [uint8_t connection_id][data]
 
-The TCP server is set up in a way to minimize waste while relaying the many packets that might go between two tox peers hence clients must create connections to other clients on the relay. The connection number is a uint8_t and must be equal or greater to 16 in order to be valid. Because a uint8_t has a maximum value of 256 it means that the maximum number of different connections to other clients that each connection can have is 240. The reason valid connection_ids are bigger than 16 is because they are the first byte of data packets. Currently only number 0 to 9 are taken however we keep a few extras in case we need to extend the protocol without breaking it completely.
+The TCP server is set up in a way to minimize waste while relaying the many
+packets that might go between two tox peers hence clients must create
+connections to other clients on the relay. The connection number is a uint8_t
+and must be equal or greater to 16 in order to be valid. Because a uint8_t has
+a maximum value of 256 it means that the maximum number of different
+connections to other clients that each connection can have is 240. The reason
+valid connection_ids are bigger than 16 is because they are the first byte of
+data packets. Currently only number 0 to 9 are taken however we keep a few
+extras in case we need to extend the protocol without breaking it completely.
 
 Routing request (Sent by client to server):
-Send a routing request to the server that we want to connect to peer with public key where the public key is the public the peer announced themselves as. The server must respond to this with a Routing response.
+Send a routing request to the server that we want to connect to peer with
+public key where the public key is the public the peer announced themselves
+as. The server must respond to this with a Routing response.
 
 Routing response (Sent by server to client):
-The response to the routing request, tell the client if the routing request succeeded (valid connection_id) and if it did, tell them the id of the connection (connection_id). The public key sent in the routing request is also sent in the response so that the client can send many requests at the same time to the server without having code to track which response belongs to which public key.
+The response to the routing request, tell the client if the routing request
+succeeded (valid connection_id) and if it did, tell them the id of the
+connection (connection_id). The public key sent in the routing request is also
+sent in the response so that the client can send many requests at the same
+time to the server without having code to track which response belongs to
+which public key.
 
-The only reason a routing request should fail is if the connection has reached the maximum number of simultaneous connections.
+The only reason a routing request should fail is if the connection has reached
+the maximum number of simultaneous connections.
 
 Connect notification (Sent by server to client):
-Tell the client that connection_id is now connected meaning the other is online and data can be sent using this connection_id.
+Tell the client that connection_id is now connected meaning the other is
+online and data can be sent using this connection_id.
 
 Disconnect notification (Sent by client to server):
-Sent when client wants the server to forget about the connection related to the connection_id in the notification. Server must remove this connection and must be able to reuse the connection_id for another connection. If the connection was connected the server must send a disconnect notification to the other client. The other client must think that this client has simply disconnected from the TCP server.
+Sent when client wants the server to forget about the connection related to
+the connection_id in the notification. Server must remove this connection and
+must be able to reuse the connection_id for another connection. If the
+connection was connected the server must send a disconnect notification to the
+other client. The other client must think that this client has simply
+disconnected from the TCP server.
 
 Disconnect notification (Sent by server to client):
-Sent by the server to the client to tell them that the connection with connection_id that was connected is now disconnect. It is sent either when the other client of the connection disconnect or when they tell the server to kill the connection (see above).
+Sent by the server to the client to tell them that the connection with
+connection_id that was connected is now disconnect. It is sent either when the
+other client of the connection disconnect or when they tell the server to kill
+the connection (see above).
 
 Ping and Pong packets (can be sent by both client and server, both will respond):
-ping packets are used to know if the other side of the connection is still live. TCP when established doesn't have any sane timeouts (1 week isn't sane) so we are obliged to have our own way to check if the other side is still live. Ping ids can be anything except 0, this is because of how toxcore sets the variable storing the ping_id that was sent to 0 when it receives a pong response which means 0 is invalid.
+ping packets are used to know if the other side of the connection is still
+live. TCP when established doesn't have any sane timeouts (1 week isn't sane)
+so we are obliged to have our own way to check if the other side is still
+live. Ping ids can be anything except 0, this is because of how toxcore sets
+the variable storing the ping_id that was sent to 0 when it receives a pong
+response which means 0 is invalid.
 
-The server should send ping packets every X seconds (toxcore TCP_server sends them every 30 seconds and times out the peer if it doesn't get a response in 10). The server should respond immediately to ping packets with pong packets.
+The server should send ping packets every X seconds (toxcore TCP_server sends
+them every 30 seconds and times out the peer if it doesn't get a response in
+10). The server should respond immediately to ping packets with pong packets.
 
-The server should respond to ping packets with pong packets with the same ping_id as was in the ping packet. The server should check that each pong packet contains the same ping_id as was in the ping, if not the pong packet must be ignored.
+The server should respond to ping packets with pong packets with the same
+ping_id as was in the ping packet. The server should check that each pong
+packet contains the same ping_id as was in the ping, if not the pong packet
+must be ignored.
 
 OOB send (Sent by client to server):
-If a peer with private key equal to the key they announced themselves with is connected, the data in the OOB send packet will be sent to that peer as an OOB recv packet. If no such peer is connected, the packet is discarded. The toxcore TCP_server implementation has a hard maximum OOB data length of 1024.
+If a peer with private key equal to the key they announced themselves with is
+connected, the data in the OOB send packet will be sent to that peer as an OOB
+recv packet. If no such peer is connected, the packet is discarded. The
+toxcore TCP_server implementation has a hard maximum OOB data length of 1024.
 
 OOB recv (Sent by server to client):
-OOB recv are sent with the announced public key of the peer that sent the OOB send packet and the exact data.
+OOB recv are sent with the announced public key of the peer that sent the OOB
+send packet and the exact data.
 
 Data:
-Data packets can only be sent and received if the corresponding connection_id is connection (a Connect notification has been received from it) if the server receives a Data packet for a non connected or existent connection it will discard it.
+Data packets can only be sent and received if the corresponding connection_id
+is connection (a Connect notification has been received from it) if the server
+receives a Data packet for a non connected or existent connection it will
+discard it.
 
-Why did I use different packet ids for all packets when some are only sent by the client and some only by the server? It's less confusing.
+Why did I use different packet ids for all packets when some are only sent by
+the client and some only by the server? It's less confusing.
