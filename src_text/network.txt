@@ -1,11 +1,35 @@
-The network module is the lowest file in toxcore that everything else depends on. This module is basically a UDP socket wrapper, serves as the sorting ground for packets received by the socket, initializes and uninitializes the socket. It also contains many socket, networking related and some other functions like a monotonic time function used by other toxcore modules.
+The network module is the lowest file in toxcore that everything else depends
+on. This module is basically a UDP socket wrapper, serves as the sorting
+ground for packets received by the socket, initializes and uninitializes the
+socket. It also contains many socket, networking related and some other
+functions like a monotonic time function used by other toxcore modules.
 
-Things of note in this module are the maximum UDP packet size define (MAX_UDP_PACKET_SIZE) which sets the maximum UDP packet size toxcore can send and receive. The list of all UDP packet ids: NET_PACKET_*. UDP packet ids are the value of the first byte of each UDP packet and is how each packet gets sorted to the right module that can handle it. networking_registerhandler() is used by higher level modules in order to tell the network object which packets to send to which module via a callback.
+Things of note in this module are the maximum UDP packet size define
+(MAX_UDP_PACKET_SIZE) which sets the maximum UDP packet size toxcore can send
+and receive. The list of all UDP packet ids: NET_PACKET_*. UDP packet ids are
+the value of the first byte of each UDP packet and is how each packet gets
+sorted to the right module that can handle it. networking_registerhandler() is
+used by higher level modules in order to tell the network object which packets
+to send to which module via a callback.
 
-It also contains datastructures used for ip addresses in toxcore. IP4 and IP6 are the datastructures for ipv4 and ipv6 addresses, IP is the datastructure for storing either (the family can be set to AF_INET (ipv4) or AF_INET6 (ipv6). It can be set to another value like TCP_ONION_FAMILY, TCP_INET, TCP_INET6 or TCP_FAMILY which are invalid values in the network modules but valid values in some other module and denote a special type of ip) and IP_Port stores an IP datastructure with a port.
+It also contains datastructures used for ip addresses in toxcore. IP4 and IP6
+are the datastructures for ipv4 and ipv6 addresses, IP is the datastructure
+for storing either (the family can be set to AF_INET (ipv4) or AF_INET6
+(ipv6). It can be set to another value like TCP_ONION_FAMILY, TCP_INET,
+TCP_INET6 or TCP_FAMILY which are invalid values in the network modules but
+valid values in some other module and denote a special type of ip) and IP_Port
+stores an IP datastructure with a port.
 
-Since the network module interacts directly with the underlying operating system with its socket functions it has code to make it work on windows, linux, etc... unlike most modules that sit at a higher level.
+Since the network module interacts directly with the underlying operating
+system with its socket functions it has code to make it work on windows,
+linux, etc... unlike most modules that sit at a higher level.
 
-The network module currently uses the polling method to read from the UDP socket. The networking_poll() function is called to read all the packets from the socket and pass them to the callbacks set using the networking_registerhandler() function. The reason it uses polling is simply because it was easier to write it that way, another method would be better here.
+The network module currently uses the polling method to read from the UDP
+socket. The networking_poll() function is called to read all the packets from
+the socket and pass them to the callbacks set using the
+networking_registerhandler() function. The reason it uses polling is simply
+because it was easier to write it that way, another method would be better
+here.
 
-The goal of this module is to provide an easy interface to a UDP socket and other networking related functions.
+The goal of this module is to provide an easy interface to a UDP socket and
+other networking related functions.

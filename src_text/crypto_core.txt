@@ -1,6 +1,14 @@
-Crypto core contains all the crypto related functions used by toxcore that relate to random numbers, encryption and decryption, key generation, nonces and random nonces. Not all crypto library functions are wrapped, only those that needed to be are. For example the NaCl functions that require a zero byte buffer before the data. You'll see functions that are provided by the crypto library used in the toxcore code, not just crypto_core functions.
+Crypto core contains all the crypto related functions used by toxcore that
+relate to random numbers, encryption and decryption, key generation, nonces
+and random nonces. Not all crypto library functions are wrapped, only those
+that needed to be are. For example the NaCl functions that require a zero byte
+buffer before the data. You'll see functions that are provided by the crypto
+library used in the toxcore code, not just crypto_core functions.
 
-The create and handle request functions are the encrypt and decrypt functions for a type of DHT packets used to send data directly to other DHT peers. To be honest they should probably be in the DHT module but they seem to fit better here.
+The create and handle request functions are the encrypt and decrypt functions
+for a type of DHT packets used to send data directly to other DHT peers. To be
+honest they should probably be in the DHT module but they seem to fit better
+here.
 
-The goal of this module is to provide nice interfaces to some crypto related functions.
-
+The goal of this module is to provide nice interfaces to some crypto related
+functions.
