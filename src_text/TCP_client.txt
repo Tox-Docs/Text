@@ -1,0 +1,25 @@
+TCP client is the client for the TCP server. It establishes and keeps a connection to a TCP server open.
+
+All the packet formats are explained in detail in TCP_server so this section will only cover only the TCP client specific things that are not covered in the TCP_server documentation.
+
+TCP clients can choose to connect to TCP servers through a proxy. Most common types of proxies (SOCKS, HTTP) work by establishing a connection through a proxy using the protocol of that specific type of proxy after the connection through that proxy to a TCP server is established, the socket behaves from the point of view of the application exactly like a TCP socket that connects directly to a TCP server instance. This means supporting proxies is easy.
+
+TCP client first establishes a TCP connection either through a proxy or directly to a TCP server. It uses the DHT public key as its long term key when connecting to the TCP server. 
+
+It establishes a secure connection to the TCP server. After establishing a connection to the TCP server the toxcore implementation immediately sends a ping packet so that the server can confirm the connection. Ideally the first packets sent would be routing request packets but for code simplicity a ping packet is the first packet sent in the connection and is sent right after the handshake response is received from the TCP server.
+
+Ping packets like all other data packets are sent as encrypted packets.
+
+Ping packets are sent by the toxcore TCP client every 30 seconds with a timeout of 10 seconds, the same interval and timeout for toxcore TCP server ping packets. They are the same because they accomplish the same thing.
+
+TCP client must have a mechanism to make sure important packets (routing requests, disconnection notifications, ping packets, ping response packets) don't get dropped because the TCP socket is full. The TCP client must save these packets and send them first thing in order when the TCP socket to the server can be written to again. TCP client must also take into account that packets might be bigger than the number of bytes it can currently write to the socket. If this happens it must save the bytes of the packet that it didn't write to the socket and write them to the socket as soon as the socket allows so that the connection does not get broken. It must also assume that it may receive only half of an encrypted packet. If this occurs it must save the part of the packet it has received and wait for the rest of the packet to arrive before handling it.
+
+TCP client can be used to open up a route to friends connected to the TCP server. This is done by sending a routing request to the TCP server with the DHT public key of the friend. This tells the server to register a connection_id to the DHT public key sent in the packet. The server will then respond with a routing response packet. If the connection was accepted the TCP client will store the connection id for this connection. The TCP client will make sure that routing response packets are responses to a routing packet that it sent to prevent a bad TCP server from possibly exploiting the client.
+
+The TCP client will handle connection notifications and disconnection notifications by alerting the module using it that the connection to the peer is up or down.
+
+TCP client will send a disconnection notification to kill a connection to a friend. It must send a disconnection notification packet irregardless if the peer was online or offline so that the server knows they have to unregister the connection.
+
+Data to friends can be sent through the TCP relay using OOB packets and connected connections. To send an OOB packet, the DHT public key of the friend must be known. OOB packets are sent in blind and there is no way to query the TCP relay to see if the friend is connected before sending one. OOB packets should be sent when the connection to the friend via the TCP relay isn't in an connected state but it is known that the friend is connected to that relay. If the friend is connected via the TCP relay, then normal data packets must be sent as they are smaller than OOB packets.
+
+OOB recv and data packets must be handled and passed to the module using it.

@@ -1,0 +1,23 @@
+friend_connection is the module that sits on top of the DHT, onion and net_crypto modules and takes care of linking the 3 together. 
+
+Friends in friend_connection are represented with their real public key. When a friend is added in friend_connection, an onion friend is created for that friend. This means that the onion module will start looking for this friend and send that friend their DHT public key and the TCP relays they are connected to in case we can only connect with TCP.
+
+Once the onion returns the DHT public key of the peer, the DHT public key is saved, added to the DHT friends list and a new net_crypto connection is created. Any TCP relays returned by the onion for this friend are passed to the net_crypto connection.
+
+If the DHT establishes a direct UDP connection with the friend, friend_connection will pass the IP/port of the friend to net_crypto and also save it to be used to reconnect to the friend if they disconnect.
+
+If net_crypto finds that the friend has a different DHT public key which can happen if the friend restarted their client, net_crypto will pass the new DHT public key to the onion module and will remove the DHT entry for the old DHT public key and replace it with the new one. The current net_crypto connection will also be killed and a new one with the correct DHT public key will be created.
+
+When the net_crypto connection for a friend goes online, friend_connection will tell the onion module that the friend is online so that it can stop spending resources looking for the friend. When the friend connection goes offline, friend_connection will tell the onion module so that it can start looking for the friend again.
+
+There are 2 types of data packets sent to friends with the net_crypto connection handled at the level of friend_connection. Alive packets are packets with the packet id or first byte of data (only byte in this packet) being 16. They are used in order to check if the other friend is still online. net_crypto does not have any timeout when the connection is established so timeouts are caught using this packet. In toxcore, this packet is sent every 8 seconds. If none of these packets are received for 32 seconds, the connection is timed out and killed. These numbers seem to cause the least issues and 32 seconds is not too long so that if a friend times out toxcore won't see them online for too long. Usually when a friend goes offline they have time to send a disconnect packet in the net_crypto connection which makes them appear offline almost instantly.
+
+The timeout for when to stop retrying to connect to a friend by creating new net_crypto connections when the old one times out in toxcore is the same as the timeout for DHT peers however it is calculated from the last time a DHT public key was received for the friend or the friends net_crypto connection went offline after being online. The highest time is used to calculate when the timeout is. net_crypto connections will be recreated (if the connection fails) until this timeout.
+
+friend_connection sends a list of 3 relays (same number as the target number of TCP relay connections in TCP_connections) to each friend we are connected to every 5 minutes in toxcore. Right before sending the relays they are associated to the current net_crypto->TCP_connections connection. This is done in order to connect the two friends together using the relays because the friend who receives the packet will associate those sent relays to the net_crypto connection they received it from and if both sides do that they will connect to each other using them. The packet id or first byte of the packet of share relay packets is 17. This is then followed by some TCP relays stored in packed node format. 
+
+[uint8_t packet id (17)][TCP relays in packed node format (see DHT)]
+
+For all other data packets, friend_connection passes them all up to the upper Messenger module. It also separates lossy and lossless packets from net_crypto.
+
+Friend connection takes care of establishing the connection to the friend and gives the upper messenger layer a simple interface to receive and send messages, add and remove friends and know if a friend is connected (online) or not connected (offline).
