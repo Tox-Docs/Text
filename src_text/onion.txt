@@ -12,6 +12,8 @@ The onion works by enabling peers to announce their real public key to peers by 
 
 In order to announce its real public key anonymously to the Tox network while using the onion, a peer first picks 3 random nodes that it knows (they can be from anywhere: the DHT, connected TCP relays or nodes found while finding peers with the onion). The nodes should be picked in a way that makes them unlikely to be operated by the same person perhaps by looking at the ip addresses and looking if they are in the same subnet or other ways. More research is needed to make sure nodes are picked in the safest way possible.
 
+The reason for 3 nodes is that 3 hops is what they use in Tor and other anonymous onion based networks.
+
 These nodes are referred to as nodes A, B and C. Note that if a peer cannot communicate via UDP, its first peer will be one of the TCP relays it is connected to, which will be used to send its onion packet to the network.
 
 TCP relays can only be node A or the first peer in the chain as the TCP relay is essentially acting as a gateway to the network. The data sent to the TCP Client module to be sent as a TCP onion packet by the module is different from the one sent directly via UDP. This is because it doesn't need to be encrypted (the connection to the TCP relay server is already encrypted).
@@ -96,7 +98,7 @@ The random public keys in the onion packets are temporary public keys generated 
 
 The nonce is used to encrypt all the layers of encryption. This 24 byte nonce should be randomly generated. If it isn't randomly generated and has a relation to nonces used for other paths it could be possible to tie different onion paths together.
 
-The IP_Port is an ip and port in packed format: [byte (TOX_AF_INET (2)(for ipv4) or TOX_AF_INET6 (10)(for ipv6))][ip(4 bytes if ipv4, 16 bytes if ipv6)][if ipv4 this is 12 bytes of zeroes][port (2 bytes)]
+The IP_Port is an ip and port in packed format: [byte (TOX_AF_INET (2)(for ipv4) or TOX_AF_INET6 (10)(for ipv6))][ip(4 bytes if ipv4, 16 bytes if ipv6)][if ipv4 this is 12 bytes of zeroes so that both ipv4 and ipv6 have the same stored size][port (2 bytes)]
 
 The IP_port will always end up being of size 19 bytes. This is to make it hard to know if an ipv4 or ipv6 ip is in the packet just by looking at the size. The 12 bytes of zeros when ipv4 must be set to 0 and not left uninitialized as some info may be leaked this way if it stays uninitialized. All numbers here are in big endian format.
 
@@ -174,13 +176,15 @@ The route response packets are just the last elements (nonce, public key, encryp
 
 To handle onion announce packets, toxcore first receives an announce packet and decrypts it.
 
-Toxcore generates ping_ids by taking a 32 byte sha hash of the current time, some secret bytes generated when the instance is created, the current time divided by a 20 second timeout, the public key of the requester and the source ip/port that the packet was received from. Since the ip/port that the packet was received from is in the ping_id, the announce packets being sent with a ping id must be sent using the same path as the packet that we received the ping_id from or announcing will fail. 
+Toxcore generates ping_ids by taking a 32 byte sha hash of the current time, some secret bytes generated when the instance is created, the current time divided by a 20 second timeout, the public key of the requester and the source ip/port that the packet was received from. Since the ip/port that the packet was received from is in the ping_id, the announce packets being sent with a ping id must be sent using the same path as the packet that we received the ping_id from or announcing will fail.
+
+The reason for this 20 second timeout in toxcore is that it gives a reasonable time (20 to 40 seconds) for a peer to announce himself while taking in count all the possible delays with some extra seconds.
 
 Toxcore generates 2 different ping ids, the first is generated with the current time (divided by 20) and the second with the current time + 20 (divided by 20). The two ping ids are then compared to the ping ids in the received packets. The reason for doing this is that storing every ping id received might be expensive and leave us vulnerable to a DoS attack, this method makes sure that the other cannot generate ping_ids and must ask for them. The reason for the 2 ping_ids is that we want to make sure that the timeout is at least 20 seconds and cannot be 0.
 
 If one of the two ping ids is equal to the public key used to encrypt the announce packet (the pk the peer is announcing himself as), the sendback data public key and the sendback data are stored in the datastructure used to store announced peers. If the implementation has a limit to how many announced entries it can store, it should only store the entries closest (determined by the DHT distance function) to its DHT public key. If the entry is already there, the information will simply be updated with the new one and the timeout will be reset for that entry.
 
-Toxcore has a timeout of 300 seconds for announce entries after which they are removed.
+Toxcore has a timeout of 300 seconds for announce entries after which they are removed which is long enough to make sure the entries don't expire prematurely but not long enough for peers to stay announced for extended amounts of time after they go offline.
 
 Toxcore will then copy the 4 DHT nodes closest to the public key being searched to a new packet (the response).
 
@@ -196,7 +200,7 @@ In order to announce itself using onion announce packets toxcore first takes DHT
 
 Onion paths have different timeouts depending on whether the path is confirmed or unconfirmed. Unconfirmed paths (paths that core has never received any responses from) have a timeout of 4 seconds with 2 tries before they are deemed non working. This is because, due to network conditions, there may be a large number of newly created paths that do not work and so trying them a lot would make finding a working path take much longer. The timeout for a confirmed path (from which a response was received) is 10 seconds with 4 tries without a response. A confirmed path has a maximum lifetime of 1200 seconds to make possible deanonimization attacks more difficult.
 
-Toxcore saves a maximum of 12 paths: 6 paths are reserved for announcing ourselves and 6 others are used to search for friends. This may not be the safest way (some nodes may be able to associate friends together) however it is much more performant than having different paths for each friend. The main benefit is that the announcing and searching are done with different paths, which makes it difficult to know that peer with real public key X is friends with Y and Z. More research is needed to find the best way to do this. At first toxcore did have different paths for each friend, however, that meant that each friend path was almost never used (and checked). When using a low amount of paths for searching there is less resources needed to find good paths.
+Toxcore saves a maximum of 12 paths: 6 paths are reserved for announcing ourselves and 6 others are used to search for friends. This may not be the safest way (some nodes may be able to associate friends together) however it is much more performant than having different paths for each friend. The main benefit is that the announcing and searching are done with different paths, which makes it difficult to know that peer with real public key X is friends with Y and Z. More research is needed to find the best way to do this. At first toxcore did have different paths for each friend, however, that meant that each friend path was almost never used (and checked). When using a low amount of paths for searching there is less resources needed to find good paths. 6 paths are used because 4 was too low and caused some performance issues because it took longer to find some good paths at the beginning because only 4 could be tried at a time. A too high number meanwhile would mean each path is used (and tested) less. The reason why the numbers are the same for both types of paths is for code simplification purposes.
 
 To search/announce itself to peers, toxcore keeps the 8 closest peers to each key it is searching (or announcing itself to). To populate these it starts by sending announce requests to random peers for all the public keys it is searching for. It then recursively searches closer and closer peers (DHT distance function) until it no longer finds any. It is important to make sure it is not too aggressive at searching the peers as some might no longer be online but peers might still send announce responses with their information. Toxcore keeps lists of last pinged nodes for each key searched so as not to ping dead nodes too aggressively.
 
@@ -204,9 +208,11 @@ Toxcore decides if it will send an announce packet to one of the 4 peers in the 
 
 Peers are only put in the 8 closest peers array if they respond to an announce request. If the peers fail to respond to 3 announce requests they are deemed timed out and removed.
 
+The reason for the number of peers being 8 is that a lower number might make searching for and announcing too unreliable and a higher number too bandwidth/resource intensive.
+
 Toxcore uses ping_array (see ping_array) for the 8 byte sendback data in announce packets to store information that it will need to handle the response (key to decrypt it, why was it sent? (to announce ourselves or to search? For what key? and some other info)). For security purposes it checks to make sure the packet was received from the right ip/port and checks if the key in the unencrypted part of the packet is the right public key.
 
-For peers we are announcing ourselves to, if we are not announced to them toxcore tries every 3 seconds to announce ourselves to them until they return that we have announced ourselves to, then toxcore checks every 20 seconds to see if we are still announced.
+For peers we are announcing ourselves to, if we are not announced to them toxcore tries every 3 seconds to announce ourselves to them until they return that we have announced ourselves to, then toxcore sends an announce request packet every 15 seconds to see if we are still announced and re announce ourselves at the same time. The timeout of 15 seconds means a ping_id received in the last packet will not have had time to expire (20 second minimum timeout) before it is resent 15 seconds later. Toxcore sends every announce packet with the ping_id previously received from that peer with the same path (if possible).
 
 For friends this is slightly different. It is important to start searching for friends after we are fully announced. Assuming a perfect network, we would only need to do a search for friend public keys only when first starting the instance (or going offline and back online) as peers starting up after us would be able to find us immediately just by searching for us. If we start searching for friends after we are announced we prevent a scenario where 2 friends start their clients at the same time but are enable to find each other right away because they start searching for each other while they have not announced themselves.
 
@@ -228,14 +234,14 @@ Why another round of encryption? We have to prove to the receiver that we own th
 
 The no_replay number is protection if someone tries to replay an older packet and should be set to an always increasing number. It is 8 bytes so you should set a high resolution monotonic time as the value.
 
-We send this packet every 30 seconds if there is more than one peer (in the 8) that says they our friend is announced on them. This packet can also be sent through the DHT module as a DHT request packet (see DHT) if we know the DHT public key of the friend and are looking for them in the DHT but have not connected to them yet. 
+We send this packet every 30 seconds if there is more than one peer (in the 8) that says they our friend is announced on them. This packet can also be sent through the DHT module as a DHT request packet (see DHT) if we know the DHT public key of the friend and are looking for them in the DHT but have not connected to them yet. 30 second is a reasonable timeout to not flood the network with too many packets while making sure the other will eventually receive the packet. Since packets are sent through every peer that knows the friend, resending it right away without waiting has a high likelihood of failure as the chances of packet loss happening to all (up to to 8) packets sent is low.
 
 When sent as a DHT request packet (this is the data sent in the DHT request packet):
 [uint8_t packet id (156)][long term public key of sender][24 byte nonce][Encrypted with long term private key of sender, the long term public key of receiver and the nonce:[DHT public key packet]]
 
 When sent as a DHT request packet the DHT public key packet is (before being sent as the data of a DHT request packet) encrypted with the long term keys of both the sender and receiver and put in that format. This is done for the same reason as the double encryption of the onion data packet.
 
-Toxcore tries to resend this packet through the DHT every 20 seconds.
+Toxcore tries to resend this packet through the DHT every 20 seconds. 20 seconds is a reasonable resend rate which isn't too aggressive.
 
 Toxcore has a DHT request packet handler that passes received DHT public key packets from the DHT module to this module.
 
