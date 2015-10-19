@@ -1,0 +1,30 @@
+When a Tox user adds someone with Tox, toxcore will try sending a friend request to that person. A friend request contains the long term public key of the sender, a nospam number and a message.
+
+Transmitting the long term public key is the primary goal of the friend request as it is what the peer needs to find and establish a connection to the sender. The long term public key is what the receiver adds to his friends list if he accepts the friend request.
+
+The nospam is a number used to prevent someone from spamming the network with valid friend requests. It makes sure that the only people who have seen the Tox ID of a peer are capable of sending them a friend request. The nospam is one of the components of the Tox ID.
+
+The nospam is a number or a list of numbers set by the peer, only received friend requests that contain a nospam that was set by the peer are sent to the client to be accepted or refused by the user. The nospam prevents random peers in the network from sending friend requests to non friends. The nospam is not long enough to be secure meaning an extremely resilient attacker could manage to send a spam friend request to someone. 4 bytes is large enough to prevent spam from random peers in the network. The nospam could also allow Tox users to issue different Tox IDs and even change Tox IDs if someone finds a Tox ID and decides to send it hundreds of spam friend requests. Changing the nospam would stop the incoming wave of spam friend requests without any negative effects to the users friends list. For example if users would have to change their public key to prevent them from receiving friend requests it would mean they would have to essentially abandon all their current friends as friends are tied to the public key. The nospam is not used at all once the friends have each other added which means changing it won't have any negative effects.
+
+Friend request:
+[uint32_t nospam][Message (UTF8) 1 to ONION_CLIENT_MAX_DATA_SIZE bytes]
+
+Friend request packet when sent as an onion data packet:
+[uint8_t (32)][Friend request]
+
+Friend request packet when sent as a net_crypto data packet (If we are directly connected to the peer because of a group chat but are not friends with them):
+[uint8_t (18)][Friend request]
+
+When a friend is added to toxcore with their Tox ID and a message, the friend is added in friend_connection and then toxcore tries to send friend requests.
+
+When sending a friend request, toxcore will check if the peer which a friend request is being sent to is already connected to using a net_crypto connection which can happen if both are in the same group chat. If this is the case the friend request will be sent as a net_crypto packet using that connection. If not, it will be sent as an onion data packet.
+
+Onion data packets contain the real public key of the sender and if a net_crypto connection is established it means the peer knows our real public key. This is why the friend request does not need to contain the real public key of the peer.
+
+Friend requests are sent with exponentially increasing interval of 2 seconds, 4 seconds, 8 seconds, etc... in toxcore. This is so friend requests get resent but eventually get resent in intervals that are so big that they essentially expire. The sender has no way of knowing if a peer refuses a friend requests which is why friend requests need to expire in some way. Note that the interval is the minimum timeout, if toxcore cannot send that friend request it will try again until it manages to send it. One reason for not being able to send the friend request would be that the onion has not found the friend in the onion and so cannot send an onion data packet to them.
+
+Received friend requests are passed to the client, the client is expected to show the message from the friend request to the user and ask the user if they want to accept the friend request or not. Friend requests are accepted by adding the peer sending the friend request as a friend and refused by simply ignoring it.
+
+Friend requests are sent multiple times meaning that in order to prevent the same friend request from being sent to the client multiple times toxcore keeps a list of the last real public keys it received friend requests from and discards any received friend requests that are from a real public key that is in that list. In toxcore this list is a simple circular list. There are many ways this could be improved and made more efficient as a circular list isn't very efficient however it has worked well in toxcore so far.
+
+Friend requests from public keys that are already added to the friends list should also be discarded.
