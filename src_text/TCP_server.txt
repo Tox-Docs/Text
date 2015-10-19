@@ -17,13 +17,13 @@ To establish a secure connection with a TCP server send the following 128 bytes 
 [public key of client (32 bytes)][nonce for the encrypted data [24 bytes]][encrypted with the private key of the client and public key of the server and the nonce:[public key (32 bytes) and][base nonce we want the server to use to encrypt the packets sent to us (24 bytes)]]
 
 
-The first 32 bytes are the public key that we are announcing ourselves to the server to. The next 24 bytes are a nonce which we use along with the secret key associated with the public key in the first 32 bytes of the packet to encrypt the rest of this 'packet'. The encrypted part of this packet contains a temporary public key that will be used for encryption during the connection and will be discarded after. It also contains a base nonce.
+The first 32 bytes are the public key that we are announcing ourselves to the server to. The next 24 bytes are a nonce which we use along with the secret key associated with the public key in the first 32 bytes of the packet to encrypt the rest of this 'packet'. The encrypted part of this packet contains a temporary public key that will be used for encryption during the connection and will be discarded after. It also contains a base nonce which will be used later when decrypting packets received from the TCP client.
 
 If the server decrypts successfully the encrypted data in the handshake packet and responds with the following handshake response of length 96 bytes:
 
 [nonce for the encrypted data [24 bytes]][encrypted with the public key of the client and private key of the server and the nonce:[public key (32 bytes) and][base nonce we want the client to use to encrypt the packets sent to us (24 bytes)]]
 
-The client already knows the long term public key of the server so it is omitted in the response, instead only a nonce is present in the unencrypted part. The encrypted part of the response has the same elements as the encrypted part of the request: a temporary public key tied to this connection and a base nonce both unique for the connection.
+The client already knows the long term public key of the server so it is omitted in the response, instead only a nonce is present in the unencrypted part. The encrypted part of the response has the same elements as the encrypted part of the request: a temporary public key tied to this connection and a base nonce which will be used later for encrypting packets sent to the TCP client both unique for the connection.
 
 After this the client will know the connection temporary public key and base nonce of the server and the server will know the connection base nonce and temporary public key of the client.
 
