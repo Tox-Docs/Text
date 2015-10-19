@@ -33,7 +33,7 @@ The client will then send an encrypted packet to the server, the contents of the
 
 Toxcore does not have a timeout for clients, instead it stores connecting clients in large circular lists and times them out if their entry in the list gets replaced by a newer connection. The reasoning behind this is that it prevents TCP flood attacks from having a negative impact on the currently connected nodes. There are however much better ways to do this and the only reason toxcore does it this way is because writing it was very simple. When connections are confirmed they are moved somewhere else.
 
-When the server confirms the connection he must look in the list of connected peers to see if he is already connected to a client with the same announced public key. If this is the case the server must kill the previous connection because this means that the client previously timed out and is reconnecting. Because of Toxcore design It is very unlikely to happen that two legitimate different peers will have the same public key so this is the correct behavior.
+When the server confirms the connection he must look in the list of connected peers to see if he is already connected to a client with the same announced public key. If this is the case the server must kill the previous connection because this means that the client previously timed out and is reconnecting. Because of Toxcore design it is very unlikely to happen that two legitimate different peers will have the same public key so this is the correct behavior.
 
 
 Encrypted data packets look like this to outsiders:
@@ -57,7 +57,7 @@ each encrypted data packet sent to the client will be encrypted with the shared 
 
 each packet received from the client will be decrypted with the shared key and with a nonce equal to: (server base nonce + number of packets sent so for the first packet it is (starting at 0) nonce + 0, the second is nonce + 1 and so on. Note that nonces like all other numbers sent over the network in toxcore are numbers in big endian format so when increasing them by 1 the least significant byte is the last one)
 
-Encrypted packets have a hard maximum size of 2048 in the toxcore TCP server implementation, 2048 is big enough to make sure that all toxcore packets can go through and leaves some extra space just in case.
+Encrypted data packets have a hard maximum size of 2 + 2048 bytes in the toxcore TCP server implementation, 2048 bytes is big enough to make sure that all toxcore packets can go through and leaves some extra space just in case the protocol needs to be changed in the future. The 2 bytes represents the size of the data length and the 2048 bytes the max size of the encrypted part. This means the maximum size is 2050 bytes. In current toxcore, the largest encrypted data packets sent will be of size 2 + 1417 which is 1419 total.
 
 
 The logic behind the format of the handshake is that we:
