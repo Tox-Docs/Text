@@ -20,12 +20,12 @@ cookie request packet (145 bytes):
 [Encrypted message containing:
     [Sender's real public key (32 bytes)]
     [padding (32 bytes)]
-    [uint64_t number (must be sent back untouched in cookie response)]
+    [uint64_t echo id (must be sent back untouched in cookie response)]
 ]
 
 Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
 
-The packet id for cookie request packets is 24. The request contain the DHT public key of the sender which is the key used (The DHT private key) (along with the DHT public key of the receiver) to encrypt the encrypted part of the cookie packet and a nonce also used to encrypt the encrypted part of the packet. Padding is used to maintain backwards-compatibility with previous versions of the protocol. The number in the cookie request must be sent back untouched in the cookie response. This number is how the peer sending the request can be sure that the response received was a response to the packet that he sent.
+The packet id for cookie request packets is 24. The request contain the DHT public key of the sender which is the key used (The DHT private key) (along with the DHT public key of the receiver) to encrypt the encrypted part of the cookie packet and a nonce also used to encrypt the encrypted part of the packet. Padding is used to maintain backwards-compatibility with previous versions of the protocol. The echo id in the cookie request must be sent back untouched in the cookie response. This echo id is how the peer sending the request can be sure that the response received was a response to the packet that he sent.
 
 The reason for sending the DHT public key and real public key in the cookie request is that both are contained in the cookie sent back in the response.
 
@@ -36,14 +36,14 @@ cookie response packet (161 bytes):
 [Random nonce (24 bytes)]
 [Encrypted message containing:
     [Cookie]
-    [uint64_t number (that was sent in the request)]
+    [uint64_t echo id (that was sent in the request)]
 ]
 
 Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
 
 The packet id for cookie request packets is 25. The response contains a nonce and an encrypted part encrypted with the nonce. The encrypted part is encrypted with the same key used to decrypt the encrypted part of the request meaning the expensive shared key generation needs to be called only once in order to handle and respond to a cookie request packet with a cookie response. 
 
-The Cookie (see below) and the number that was sent in the request are the contents of the encrypted part.
+The Cookie (see below) and the echo id that was sent in the request are the contents of the encrypted part.
 
 The Cookie should be (112 bytes):
 [nonce]
