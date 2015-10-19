@@ -27,6 +27,8 @@ Encrypted message is encrypted with sender's DHT private key, receiver's DHT pub
 
 The packet id for cookie request packets is 24. The request contain the DHT public key of the sender which is the key used (The DHT private key) (along with the DHT public key of the receiver) to encrypt the encrypted part of the cookie packet and a nonce also used to encrypt the encrypted part of the packet. Padding is used to maintain backwards-compatibility with previous versions of the protocol. The number in the cookie request must be sent back untouched in the cookie response. This number is how the peer sending the request can be sure that the response received was a response to the packet that he sent.
 
+The reason for sending the DHT public key and real public key is the cookie request is that both are contained in the cookie sent back in the response.
+
 Toxcore currently sends 1 cookie request packet every second 8 times before it kills the connection if there are no responses.
 
 cookie response packet (161 bytes):
