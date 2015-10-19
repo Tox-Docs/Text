@@ -21,7 +21,7 @@ The first 32 bytes are the public key (DHT public key) that the TCP client is an
 
 If the server decrypts successfully the encrypted data in the handshake packet and responds with the following handshake response of length 96 bytes:
 
-[nonce for the encrypted data [24 bytes]][encrypted with the DHT public key of the client and private key of the server and the nonce:[public key (32 bytes)][base nonce the TCP server wants the TCP client to use to encrypt the packets sent to the TCP server (24 bytes)]]
+[nonce for the encrypted data [24 bytes]][encrypted with the private key of the server and the DHT public key of the client and the nonce:[public key (32 bytes)][base nonce the TCP server wants the TCP client to use to encrypt the packets sent to the TCP server (24 bytes)]]
 
 The client already knows the long term public key of the server so it is omitted in the response, instead only a nonce is present in the unencrypted part. The encrypted part of the response has the same elements as the encrypted part of the request: a temporary public key tied to this connection and a base nonce which will be used later when decrypting packets received from the TCP client both unique for the connection.
 
