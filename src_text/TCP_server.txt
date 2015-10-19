@@ -138,7 +138,7 @@ The server should send ping packets every X seconds (toxcore TCP_server sends th
 The server should respond to ping packets with pong packets with the same ping_id as was in the ping packet. The server should check that each pong packet contains the same ping_id as was in the ping, if not the pong packet must be ignored.
 
 OOB send (Sent by client to server):
-If a peer with private key equal to the key they announced themselves with is connected, the data in the OOB send packet will be sent to that peer as an OOB recv packet. If no such peer is connected, the packet is discarded. The toxcore TCP_server implementation has a hard maximum OOB data length of 1024.
+If a peer with private key equal to the key they announced themselves with is connected, the data in the OOB send packet will be sent to that peer as an OOB recv packet. If no such peer is connected, the packet is discarded. The toxcore TCP_server implementation has a hard maximum OOB data length of 1024. 1024 was picked because it is big enough for the net_crypto packets related to the handshake and is large enough that any changes to the protocol would not require breaking TCP server. It is however not large enough for the biggest net_crypto packets sent with an established net_crypto connection to prevent sending those via OOB packets.
 
 OOB recv (Sent by server to client):
 OOB recv are sent with the announced public key of the peer that sent the OOB send packet and the exact data.
