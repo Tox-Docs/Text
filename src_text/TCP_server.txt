@@ -8,7 +8,7 @@ TCP connections between the TCP client and the server are encrypted to prevent a
 
 When a client first connects to a TCP server he opens up a TCP connection to the ip and port the TCP server is listening on. Once the connection is established he then sends a handshake packet, the server then responds with his own and a secure connection is established. The connection is then said to be unconfirmed and the client must then send some encrypted data to the server before the server can mark the connection as confirmed. The reason it works like this is to prevent a type of attack where a peer would send a handshake packet and then time out right away. To prevent this the server must wait a few seconds for a sign that the client received his handshake packet before confirming the connection. The both can then communicate with each other using the encrypted connection.
 
-The TCP server essentially acts as just a relay between 2 peers. When a TCP client connects to the server he tells the server which clients he wants the server to connect him to. The server will only let two clients connect to each other if both have indicated to the server that they want to connect to each other. This is to prevent non friends from checking if someone is connected to a TCP server. The TCP server supports sending packets blindly through it to clients with a client with public key X (OOB packets) however the TCP server does not give any feedback or anything to say if the packet arrived or not and as such it is only useful to send data to friends who may not know that we are connected to the current TCP server while we know they are.
+The TCP server essentially acts as just a relay between 2 peers. When a TCP client connects to the server he tells the server which clients he wants the server to connect him to. The server will only let two clients connect to each other if both have indicated to the server that they want to connect to each other. This is to prevent non friends from checking if someone is connected to a TCP server. The TCP server supports sending packets blindly through it to clients with a client with public key X (OOB packets) however the TCP server does not give any feedback or anything to say if the packet arrived or not and as such it is only useful to send data to friends who may not know that we are connected to the current TCP server while we know they are. This occurs when one peer discovers the TCP relay and DHT public key of the other peer before the other peer discovers its DHT public key. In that case OOB packets would be used until the other peer knows that the peer is connected to the relay and establishes a connection through it.
 
 In order to make toxcore work on TCP only the TCP server supports relaying onion packets from TCP clients and sending any responses from them to TCP clients.
 
@@ -138,6 +138,8 @@ If a peer with private key equal to the key they announced themselves with is co
 
 OOB recv (Sent by server to client):
 OOB recv are sent with the announced public key of the peer that sent the OOB send packet and the exact data.
+
+OOB packets can be used just like normal data packets however the extra size makes sending data only through them less efficient than data packets.
 
 Data:
 Data packets can only be sent and received if the corresponding connection_id is connection (a Connect notification has been received from it) if the server receives a Data packet for a non connected or existent connection it will discard it.
