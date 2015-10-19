@@ -29,14 +29,14 @@ In toxcore the base nonce is generated randomly like all the other nonces, it mu
 
 After this the client will know the connection temporary public key and base nonce of the server and the server will know the connection base nonce and temporary public key of the client.
 
-The client will then send an encrypted packet to the server, the contents of the packet do not matter and it must be handled normally by the server (ex: if it was a ping send a pong response), the only thing that does matter is that the packet was encrypted correctly by the client because it means that the client has correctly received the handshake response the server sent to it and that the handshake the client sent to the server really came from the client and not from an attacker replaying packets. The server must prevent resource consuming attacks by timing out clients if they do not send any encrypted packets so the server to prove to the server that the connection was established correctly.
+The client will then send an encrypted packet to the server, the contents of the packet do not matter and it must be handled normally by the server (ex: if it was a ping send a pong response. The first packet must be any valid encrypted data packet), the only thing that does matter is that the packet was encrypted correctly by the client because it means that the client has correctly received the handshake response the server sent to it and that the handshake the client sent to the server really came from the client and not from an attacker replaying packets. The server must prevent resource consuming attacks by timing out clients if they do not send any encrypted packets so the server to prove to the server that the connection was established correctly.
 
 Toxcore does not have a timeout for clients, instead it stores connecting clients in large circular lists and times them out if their entry in the list gets replaced by a newer connection. The reasoning behind this is that it prevents TCP flood attacks from having a negative impact on the currently connected nodes. There are however much better ways to do this and the only reason toxcore does it this way is because writing it was very simple. When connections are confirmed they are moved somewhere else.
 
 When the server confirms the connection he must look in the list of connected peers to see if he is already connected to a client with the same announced public key. If this is the case the server must kill the previous connection because this means that the client previously timed out and is reconnecting. Because of Toxcore design it will not happen that two legitimate different peers will have the same public key so this is the correct behavior.
 
 
-Encrypted packets look like this to outsiders:
+Encrypted data packets look like this to outsiders:
 [[uint16_t (length of data)][encrypted data]]
 
 In a TCP stream they would look like:
