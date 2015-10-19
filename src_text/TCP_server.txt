@@ -119,7 +119,7 @@ Send a routing request to the server that we want to connect to peer with public
 Routing response (Sent by server to client):
 The response to the routing request, tell the client if the routing request succeeded (valid connection_id) and if it did, tell them the id of the connection (connection_id). The public key sent in the routing request is also sent in the response so that the client can send many requests at the same time to the server without having code to track which response belongs to which public key.
 
-The only reason a routing request should fail is if the connection has reached the maximum number of simultaneous connections.
+The only reason a routing request should fail is if the connection has reached the maximum number of simultaneous connections. In case the routing request fails the public key in the response will be the public key in the failed request.
 
 Connect notification (Sent by server to client):
 Tell the client that connection_id is now connected meaning the other is online and data can be sent using this connection_id.
