@@ -2,5 +2,7 @@ Crypto core contains all the crypto related functions used by toxcore that relat
 
 The create and handle request functions are the encrypt and decrypt functions for a type of DHT packets used to send data directly to other DHT peers. To be honest they should probably be in the DHT module but they seem to fit better here.
 
+The random nonce generation function is used everywhere in toxcore to generate nonces. It uses the cryptographically secure random number generator in toxcore which prevents new nonces from being associated with previous nonces which could lead to issues in places like the onion module. If many different packets could be tied together due to how the nonces were generated using rand for example, it might lead to tying DHT and onion announce packets together which would introduce a flaw in the system as non friends could tie some peoples DHT and long term keys together.
+
 The goal of this module is to provide nice interfaces to some crypto related functions.
 
