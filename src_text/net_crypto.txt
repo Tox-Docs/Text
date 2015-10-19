@@ -39,7 +39,7 @@ cookie response packet (161 bytes):
     [uint64_t echo id (that was sent in the request)]
 ]
 
-Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
+Encrypted message is encrypted with the exact same symmetric key as the cookie request packet it responds to but with a different nonce.
 
 The packet id for cookie request packets is 25. The response contains a nonce and an encrypted part encrypted with the nonce. The encrypted part is encrypted with the same key used to decrypt the encrypted part of the request meaning the expensive shared key generation needs to be called only once in order to handle and respond to a cookie request packet with a cookie response. 
 
