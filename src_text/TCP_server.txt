@@ -33,7 +33,7 @@ The client will then send an encrypted packet to the server, the contents of the
 
 Toxcore does not have a timeout for clients, instead it stores connecting clients in large circular lists and times them out if their entry in the list gets replaced by a newer connection. The reasoning behind this is that it prevents TCP flood attacks from having a negative impact on the currently connected nodes. There are however much better ways to do this and the only reason toxcore does it this way is because writing it was very simple. When connections are confirmed they are moved somewhere else.
 
-When the server confirms the connection he must look in the list of connected peers to see if he is already connected to a client with the same announced public key. If this is the case the server must kill the previous connection because this means that the client previously timed out and is reconnecting. Because of Toxcore design it will not happen that two legitimate different peers will have the same public key so this is the correct behavior.
+When the server confirms the connection he must look in the list of connected peers to see if he is already connected to a client with the same announced public key. If this is the case the server must kill the previous connection because this means that the client previously timed out and is reconnecting. Because of Toxcore design It is very unlikely to happen that two legitimate different peers will have the same public key so this is the correct behavior.
 
 
 Encrypted data packets look like this to outsiders:
