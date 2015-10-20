@@ -18,6 +18,8 @@ friend_connection sends a list of 3 relays (same number as the target number of 
 
 [uint8_t packet id (17)][TCP relays in packed node format (see DHT)]
 
+If local IPs are received as part of the packet, the local IP will be replaced with the IP of the peer that sent the relay. This is because we assume this is the best way to attempt to connect to the TCP relay. If the peer that sent the relay is using a local IP, then the sent local IP should be used to connect to the relay.
+
 For all other data packets, friend_connection passes them all up to the upper Messenger module. It also separates lossy and lossless packets from net_crypto.
 
 Friend connection takes care of establishing the connection to the friend and gives the upper messenger layer a simple interface to receive and send messages, add and remove friends and know if a friend is connected (online) or not connected (offline).
