@@ -1,0 +1,15 @@
+LAN discovery is a way to discover Tox peers that are on a local network. If two Tox friends are on a local network, the most efficient way for them to communicate together is to use the local network. If a Tox client is opened on a local network in which another Tox client exists then good behavior would be to bootstrap to the network using the Tox client on the local network. This is what LAN discovery is meant to accomplish.
+
+LAN discovery works by sending a UDP packet with the toxcore UDP socket to the interface broadcast address on IPv4 along with (255.255.255.255 the all interfaces broadcast address) and multicast address (FF02::1) on IPv6 on port 33445 which is the default Tox UDP port.
+
+The LAN Discovery packet:
+[uint8_t packet id (33)][32 bytes: DHT public key]
+
+LAN Discovery packets contain the DHT public key of the sender. When a LAN Discovery packet is received, a DHT get nodes packet will be sent to the sender of the packet. This means that the DHT instance will essentially bootstrap itself to every peer from which it receives one of these packets. This means Tox clients will bootstrap themselves automatically from other Tox clients running on the local network.
+
+Toxcore sends these packets every 10 seconds because it keeps delays low. The packets could be sent every 60 seconds but it would make peer finding over the network 6 times slower.
+
+This enables two friends on a local network to find each other because the DHT must prioritize LAN addresses over non LAN addresses for DHT peers. Also, sending a get node request/bootstrapping from a peer successfully should add them to the list of DHT peers if we are searching for them. The reason the peer must not be immediately added if a LAN discovery packet with a DHT public key that we are searching is received is because there is no cryptographic proof or anything to prove that this packet is legit and was not maliciously crafted. This means that a DHT get node or ping packet must be sent and a valid response must be received before we can say that this peer has been found.
+
+LAN discovery is how Tox handles and makes everything work well on LAN.
+

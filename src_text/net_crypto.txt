@@ -1,15 +1,14 @@
 The Tox transport protocol is what Tox uses to establish and send data securely to friends and provides encryption, ordered delivery, and perfect forward secrecy. It is a UDP protocol but it is also used when 2 friends connect over TCP relays.
 
-The reason the protocol for connections to friends over TCP relays and direct UDP is the same is for simplicity and so the connection can switch between both without the peers needing to disconnect and reconnect. For example two Tox friends might first connect over TCP and a few seconds later switch to UDP when a direct UDP connection becomes possible. The opening up of the UDP route or 'hole punching' is done by the DHT module and the opening up of a relayed TCP connection is done by the TCP_connection module. The Tox transport protocol has the job of connecting two peers (tox friends) safely once a route or communications link between both is found. Direct UDP is preferred over TCP because it is direct and isn't limited by possibly congested TCP relays. Also, a peer can only connect to another using the Tox transport protocol if they know the real public key and DHT public key of the peer they want to connect to. However, both the DHT and TCP connection modules require this information in order to find and open the route to the peer which means we assume this information is known.
+The reason the protocol for connections to friends over TCP relays and direct UDP is the same is for simplicity and so the connection can switch between both without the peers needing to disconnect and reconnect. For example two Tox friends might first connect over TCP and a few seconds later switch to UDP when a direct UDP connection becomes possible. The opening up of the UDP route or 'hole punching' is done by the DHT module and the opening up of a relayed TCP connection is done by the TCP_connection module. The Tox transport protocol has the job of connecting two peers (tox friends) safely once a route or communications link between both is found. Direct UDP is preferred over TCP because it is direct and isn't limited by possibly congested TCP relays. Also, a peer can only connect to another using the Tox transport protocol if they know the real public key and DHT public key of the peer they want to connect to. However, both the DHT and TCP connection modules require this information in order to find and open the route to the peer which means we assume this information is known by toxcore and has been passed to net_crypto when the net_crypto connection was created.
 
-Because this protocol has to work over UDP it must account for possible packet loss, packets arriving in the wrong order and has to implement some kind of congestion control. This also makes it work very well on TCP relays that we assume may go down at any time as the connection will stay strong even if there is need to switch to another TCP relay which will cause some packet loss. 
-
+Because this protocol has to work over UDP it must account for possible packet loss, packets arriving in the wrong order and has to implement some kind of congestion control. This is implemented above the level at which the packets are encrypted. This prevents a malicious TCP relay from disrupting the connection by modifying the packets that go through it. The packet loss prevention makes it work very well on TCP relays that we assume may go down at any time as the connection will stay strong even if there is need to switch to another TCP relay which will cause some packet loss. 
 
 Before sending the actual handshake packet the peer must obtain a cookie. This cookie step serves as a way for the receiving peer to confirm that the peer initiating the connection can receive the responses in order to prevent certain types of DoS attacks.
 
 The peer receiving a cookie request packet must not allocate any resources to the connection. They will simply respond to the packet with a cookie response packet containing the cookie that the requesting peer must then use in the handshake to initiate the actual connection.
 
-The cookie response must be sent back using the exact same link the cookie request packet was sent from. For example, if a request is sent from UDP with ip port X, it must be sent back by UDP to ip port X. If it was received from a TCP OOB packet it must be sent back by a TCP OOB packet via the same relay with the destination being the peer who sent the response. If it was received from an established TCP relay connection it must be sent back via that same exact connection.
+The cookie response must be sent back using the exact same link the cookie request packet was sent from. The reason for this is that if it is sent back using another link, the other link might not work and the peer will not be expecting responses from another link. For example, if a request is sent from UDP with ip port X, it must be sent back by UDP to ip port X. If it was received from a TCP OOB packet it must be sent back by a TCP OOB packet via the same relay with the destination being the peer who sent the request. If it was received from an established TCP relay connection it must be sent back via that same exact connection.
 
 When a cookie request is received, the peer must not use the information in the request packet for anything, he must not store it, he must only create a cookie and cookie response from it, then send the created cookie response packet and forget them. The reason for this is to prevent possible attacks. For example if a peer would allocate long term memory for each cookie request packet received then a simple packet flood would be enough to achieve an effective denial of service attack by making the program run out of memory.
 
@@ -21,12 +20,14 @@ cookie request packet (145 bytes):
 [Encrypted message containing:
     [Sender's real public key (32 bytes)]
     [padding (32 bytes)]
-    [uint64_t number (must be sent back untouched in cookie response)]
+    [uint64_t echo id (must be sent back untouched in cookie response)]
 ]
 
 Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
 
-The packet id for cookie request packets is 24. The request contain the DHT public key of the sender which is the key used (The DHT private key) (along with the DHT public key of the receiver) to encrypt the encrypted part of the cookie packet and a nonce also used to encrypt the encrypted part of the packet. Padding is used to maintain backwards-compatibility with previous versions of the protocol. The number in the cookie request must be sent back untouched in the cookie response. This number is how the peer sending the request can be sure that the response received was a response to the packet that he sent.
+The packet id for cookie request packets is 24. The request contain the DHT public key of the sender which is the key used (The DHT private key) (along with the DHT public key of the receiver) to encrypt the encrypted part of the cookie packet and a nonce also used to encrypt the encrypted part of the packet. Padding is used to maintain backwards-compatibility with previous versions of the protocol. The echo id in the cookie request must be sent back untouched in the cookie response. This echo id is how the peer sending the request can be sure that the response received was a response to the packet that he sent.
+
+The reason for sending the DHT public key and real public key in the cookie request is that both are contained in the cookie sent back in the response.
 
 Toxcore currently sends 1 cookie request packet every second 8 times before it kills the connection if there are no responses.
 
@@ -35,14 +36,14 @@ cookie response packet (161 bytes):
 [Random nonce (24 bytes)]
 [Encrypted message containing:
     [Cookie]
-    [uint64_t number (that was sent in the request)]
+    [uint64_t echo id (that was sent in the request)]
 ]
 
-Encrypted message is encrypted with sender's DHT private key, receiver's DHT public key and the nonce.
+Encrypted message is encrypted with the exact same symmetric key as the cookie request packet it responds to but with a different nonce.
 
 The packet id for cookie request packets is 25. The response contains a nonce and an encrypted part encrypted with the nonce. The encrypted part is encrypted with the same key used to decrypt the encrypted part of the request meaning the expensive shared key generation needs to be called only once in order to handle and respond to a cookie request packet with a cookie response. 
 
-The Cookie (see below) and the number that was sent in the request are the contents of the encrypted part.
+The Cookie (see below) and the echo id that was sent in the request are the contents of the encrypted part.
 
 The Cookie should be (112 bytes):
 [nonce]
@@ -152,7 +153,7 @@ The packet id for encrypted packets is 27. Encrypted packets are the packets use
 
 To get the key used to encrypt/decrypt each packet in the connection a peer takes the session public key received in the handshake and the private key counterpart of the key it sent it the handshake and generates a shared key from it. This shared key will be identical for both peers. It is important to note that connection keys must be wiped when the connection is killed.
 
-To create an encrypted packet to be sent to the other peer, the data is encrypted with the shared key for this connection and the base nonce that the other peer sent in the handshake packet with the total number of encrypted packets sent in the connection added to it ('base nonce' + 0 for the first encrypted data packet sent, 'base nonce' + 1 for the second, etc.. Note that the nonce is treated as a big endian number for mathematical operations like additions). The 2 byte (uint16_t) number at the beginning of the encrypted packet is the last 2 bytes of this 24 byte nonce.
+To create an encrypted packet to be sent to the other peer, the data is encrypted with the shared key for this connection and the base nonce that the other peer sent in the handshake packet with the total number of encrypted packets sent in the connection added to it ('base nonce' + 0 for the first encrypted data packet sent, 'base nonce' + 1 for the second, etc. Note that the nonce is treated as a big endian number for mathematical operations like additions). The 2 byte (uint16_t) number at the beginning of the encrypted packet is the last 2 bytes of this 24 byte nonce.
 
 To decrypt a received encrypted packet, the nonce the packet was encrypted with is calculated using the base nonce that the peer sent to the other and the 2 byte number at the beginning of the packet. First we assume that packets will most likely arrive out of order and that some will be lost but that packet loss and out of orderness will never be enough to make the 2 byte number need an extra byte. The packet is decrypted using the shared key for the connection and the calculated nonce.
 
