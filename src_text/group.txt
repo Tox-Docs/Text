@@ -1,0 +1,16 @@
+Group chats in Tox work by temporarily adding some peers (up to 4) present in the group chat as temporary friend_connection friends, that are deleted when the group chat is exited.
+
+Each peer in the group chat is identified by their real long term public key however peers transmit their DHT public keys to each other via the group chat in order to speed up the connection by making it unnecessary for the peers to find each others DHT public keys with the onion which would happen if they would have added themselves as normal friends.
+
+The upside of using friend_connection is that group chats do not have to deal with things like hole punching, peers only on TCP or other low level networking things. The downside however is that every single peer knows each others real long term public key and DHT public key which means these group chats should only be used between friends.
+
+To connect to each other, two peers must have the other added to their list of friend connections. This is not a problem if the group chat has an equal or smaller number of participants than 5 as each of the 5 peers will have the 4 others added to their list of friend connections. When there are more peers there must be a way to ensure that peers will manage to connect to other groupchat peers.
+
+Since the maximum number of peers per groupchat that will be connected to with friend connections is 4, if all peers in the groupchat are arranged in a perfect circle and each peer connects to the 2 peers that are the closest to the right of them and the 2 peers that are closest to the left of them, the peers should form a well connected circle of peers.
+
+Group chats in toxcore do this by subtracting the real long term public key of the peer with all the others in the group (our PK - other peer PK) and finding the two peers for which the result of this operation is the smallest. The operation is then inversed (other peer PK - our PK) and this operation is done again with all the public keys of the peers in the group. The 2 peers for which the result is again the smallest are picked.
+
+This gives 4 peers that are then added as a friend connection and associated to the group. If every peer in the group does this, they will form a circle of perfectly connected peers.
+
+Once the peers are connected to each other in a circle they relay each others messages. every time a peer leaves the group or a new peer joins each member of the chat will recalculate the peers they should connect to.
+
