@@ -14,3 +14,52 @@ This gives 4 peers that are then added as a friend connection and associated to 
 
 Once the peers are connected to each other in a circle they relay each others messages. every time a peer leaves the group or a new peer joins each member of the chat will recalculate the peers they should connect to.
 
+To join a group chat the peer must first be invited to it by their friend. To make a groupchat the peer will first create a groupchat and then invite people to this group chat. Once their friends are in the group chat they can invite their other friends to the chat and so on.
+
+To create a group chat the peer will generate a random 32 byte id that will be used to uniquely identify this group chat. 32 bytes is enough so that when randomly generated with a secure random number generator every groupchat ever created will have a different id. The goal of this 32 byte id is so that peers have a way of identifying each group chat so that they can prevent themselves from joining a groupchat twice for example.
+
+The groupchat will also have an unsigned 1 byte type. This type indicates what kind of groupchat the groupchat is, the current types are:
+
+0: text
+1: audio
+
+Text groupchats are text only while audio indicates that the groupchat supports sending audio to it as well as text.
+
+The groupchat will also be identified by a unique unsigned 2 byte integer which in toxcore corresponds to the index of the groupchat in the array it is being stored in. Every groupchat in the current instance must have a different number. This number is used by groupchat peers that are directly connected to us to tell us which packets are for which groupchat. This is why every groupchat packet contains a groupchat number as part of them. Putting a 32 byte groupchat id in each packet would increase bandwidth waste by a lot which is the reason why groupchat numbers are used instead.
+
+Using the group number as the index of the array used to store the groupchat instances is recommended because this kind of access is usually most efficient and it ensures that each groupchat has a unique group number.
+
+When creating a new groupchat, the peer will add themselves as a groupchat peer with a peer number of 0 and their own long term public key and DHT public key.
+
+Invite packets:
+Invite packet:
+[uint8_t id 96][uint8_t id 0][uint16_t group chat number][33 bytes group chat identifier[1 byte type][32 bytes id]]
+
+Response packet
+[uint8_t id 96][uint8_t id 1][uint16_t group chat number(local)][uint16_t group chat number to join][33 bytes group chat identifier[1 byte type][32 bytes id]]
+
+To invite a friend to a group chat, an invite packet is sent to the friend. These packets are sent using Messenger (if you look at the Messenger packet id section, all the groupchat packet ids are in there). Note that all numbers like all other numbers sent using Tox packets are sent in big endian format.
+
+The group chat number is as explained above, the number used to uniquely identify the groupchat instance from all the other groupchat instances the peer has. It is sent in the invite packet because it is needed by the friend in order to send back groupchat related packets.
+
+What follows is the 1 byte type with the 32 byte groupchat id appended to it.
+
+To refuse the invite, the friend receiving it will simply ignore and discard it.
+
+To accept the invite, the friend will create their own groupchat instance with the 32 byte groupchat id and 1 byte type sent in the request and send a invite response packet back. The friend will also add the one who sent the invite as a temporary invited groupchat connection.
+
+The first group number in the response packet is the group number of the groupchat the invited friend just created. The second group number is the group chat number that was sent in the invite request. What follows is the 1 byte type and 32 byte groupchat id that were sent in the invite request.
+
+When a peer receives an invite response packet they will check if the group id sent back corresponds to the group id of the groupchat with the group number also sent back. If everything is ok, a new peer number will be generated for the peer that sent the invite response packet. Then the peer with their generated peer number, their long term public key and DHT public key will be added to the peer list of the groupchat. A new peer packet will also be sent to tell everyone in the group chat about the new peer. The peer will also be added as a temporary invited groupchat connection.
+
+Peer numbers are used to uniquely identify each peer in the group chat. They are used in groupchat message packets so that peers receiving them can know who or which groupchat peer sent them. As groupchat packets are relayed, they must contain something that is used by others to identify the sender. Since putting a 32 byte public key in each packet would be wasteful a 2 byte peer number is instead used. Each peer in the groupchat has a unique peer number. Toxcore generates each peer number randomly but makes sure newly generated peer numbers are not equal to current ones already used by other peers in the group chat. If two peers join the groupchat from two different endpoints there is a small possibility that both will be given the same peer number however this possibility is low enough in practice that is is not an issue.
+
+Temporary invited groupchat connections are groupchat connections to the groupchat inviter used by groupchat peers to bootstrap themselves the the groupchat. They are the same thing as connections to groupchat peers via friend connections except that they are discarded after the peer is fully connected to the group chat.
+
+Peer online packet:
+[uint8_t id 97][uint16_t group chat number (local)][33 bytes group chat identifier[1 byte type][32 bytes id]]
+
+Peer leave packet:
+[uint8_t id 98][uint16_t group chat number][uint8_t id 1]
+
+For a groupchat connection to work, both peers in the groupchat must be attempting to connect directly to each other. 
