@@ -138,4 +138,14 @@ title change packets are used to change the title of the group chat and can be s
 Chat and action messages are used by the group chat peers to send messages to others in the group chat.
 
 
-Lossy message packets are used to send audio packets to others in audio group chats.
+Lossy message packets are used to send audio packets to others in audio group chats. Lossy packets work the same way as normal relayed groupchat messages in that they are relayed to everyone in the group chat until everyone has them. 
+
+Some differences with them though is that first of all the message number is a 2 byte integer. If I were to improve the groupchats protocol I would make the message number for normal message packets 2 bytes. 1 byte means only 256 packets can be received at the same time. With the delays in groupchats and 256 packets corresponding to less than a high quality video frame it would not work. This is why 2 bytes was chosen.
+
+Note that this message number like all other numbers in the packet are in big endian format.
+
+When receiving a lossy packet the peer will first check if it was already received. If it wasn't, the packet will be added to the list of received packets and then the packet will be passed to its handler and then sent to the 2 closest connected groupchat peers that are not the sender. The reason for it to be 2 instead of 4 (well 3 if we are not the original sender) for normal message packets is that it reduces bandwidth usage without lowering the quality of the received audio stream via lossy packets. Message packets also are sent relatively rarely, enough so that changing it to 2 would have a minimal impact in bandwidth usage.
+
+To check if a packet was received, the last up to 65536 received packet numbers are stored, current groups store the last 256 packet numbers however that is because it is currently audio only. If video was added meaning a much higher number of packets would be sent, this number would be increased. If the packet number is in this list then it was received.
+
+This is how groupchats in Tox work.
