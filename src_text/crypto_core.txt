@@ -2,7 +2,23 @@ Crypto core contains all the crypto related functions used by toxcore that relat
 
 The create and handle request functions are the encrypt and decrypt functions for a type of DHT packets used to send data directly to other DHT peers. To be honest they should probably be in the DHT module but they seem to fit better here.
 
-The random nonce generation function is used everywhere in toxcore to generate nonces. It uses the cryptographically secure random number generator in toxcore which prevents new nonces from being associated with previous nonces which could lead to issues in places like the onion module. If many different packets could be tied together due to how the nonces were generated using rand for example, it might lead to tying DHT and onion announce packets together which would introduce a flaw in the system as non friends could tie some peoples DHT and long term keys together.
-
 The goal of this module is to provide nice interfaces to some crypto related functions.
+
+TODO: put this in the intro.
+
+All public keys in toxcore are 32 bytes and are generated with the crypto_box_keypair() function of the NaCl crypto library.
+
+The crypto_box*() functions of the NaCl crypto library are used to encrypt and decrypt all packets.
+
+As explained in the NaCl documentation, crypto_box is public key cryptography that uses Curve25519 to generate a shared encryption key by using the Curve25519 public key of the one that will be receiving the packet and the Curve25519 private key of the one sending the packet. When the receiver receives the packet, they will pass the counterparts of both keys used to generate the shared key used to encrypt the packet (The receivers private key counterpart of the receivers public key and the senders public key counterpart of the senders private key) to the function/algorithm and get the same shared key.
+
+This 32 byte shared key is what is used to encrypt and decrypt packets. This fact must be taken into account because it means since the key used to encrypt and decrypt packets is the same either side can both encrypt and decrypt valid packets. It also means that packets being sent could be replayed back to the sender if there is nothing to prevent it.
+
+The shared key generation is the most resource intensive part of the encryption/decryption which means that resource usage can be reduced considerably by saving the shared keys and reusing them later as much as possible.
+
+Once the shared key is generated, the encryption is done using xsalsa20 and authenticated with poly1305. This is authenticated symmetric cryptography.
+
+nonces used for crypto_box are 24 bytes.
+
+The random nonce generation function is used everywhere in toxcore to generate nonces. It uses the cryptographically secure random number generator in toxcore which prevents new nonces from being associated with previous nonces which could lead to issues in places like the onion module. If many different packets could be tied together due to how the nonces were generated using rand for example, it might lead to tying DHT and onion announce packets together which would introduce a flaw in the system as non friends could tie some peoples DHT and long term keys together.
 
