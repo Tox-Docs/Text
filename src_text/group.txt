@@ -33,10 +33,10 @@ When creating a new groupchat, the peer will add themselves as a groupchat peer 
 
 Invite packets:
 Invite packet:
-[uint8_t id 96][uint8_t id 0][uint16_t group chat number][33 bytes group chat identifier[1 byte type][32 bytes id]]
+[uint8_t id 96][uint8_t id 0][uint16_t group number][33 bytes group chat identifier[1 byte type][32 bytes id]]
 
 Response packet
-[uint8_t id 96][uint8_t id 1][uint16_t group chat number(local)][uint16_t group chat number to join][33 bytes group chat identifier[1 byte type][32 bytes id]]
+[uint8_t id 96][uint8_t id 1][uint16_t group number(local)][uint16_t group chat number to join][33 bytes group chat identifier[1 byte type][32 bytes id]]
 
 To invite a friend to a group chat, an invite packet is sent to the friend. These packets are sent using Messenger (if you look at the Messenger packet id section, all the groupchat packet ids are in there). Note that all numbers like all other numbers sent using Tox packets are sent in big endian format.
 
@@ -57,9 +57,95 @@ Peer numbers are used to uniquely identify each peer in the group chat. They are
 Temporary invited groupchat connections are groupchat connections to the groupchat inviter used by groupchat peers to bootstrap themselves the the groupchat. They are the same thing as connections to groupchat peers via friend connections except that they are discarded after the peer is fully connected to the group chat.
 
 Peer online packet:
-[uint8_t id 97][uint16_t group chat number (local)][33 bytes group chat identifier[1 byte type][32 bytes id]]
+[uint8_t id 97][uint16_t group number (local)][33 bytes group chat identifier[1 byte type][32 bytes id]]
 
 Peer leave packet:
-[uint8_t id 98][uint16_t group chat number][uint8_t id 1]
+[uint8_t id 98][uint16_t group number][uint8_t id 1]
 
 For a groupchat connection to work, both peers in the groupchat must be attempting to connect directly to each other. 
+
+Groupchat connections are established when both peers who want to connect to each other either create a new friend connection to connect to each other or reuse an exiting friend connection that connects them together (if they are friends or already are connected together because of another group chat).
+
+As soon as the connection to the other peer is opened, a peer online packet is sent to the peer. The goal of the online packet is to tell the peer that we want to establish the groupchat connection with them and tell them the groupchat number of our groupchat instance. The peer online packet contains the group number and the group type and 32 byte groupchat id. The group number is the group number the peer has for the group with the group id sent in the packet. 
+
+When both sides send a online packet to the other peer, a connection is established. 
+
+When an online packet is received, the group number to communicate with the group is saved. If the connection to the peer is already established (an online packet has been already received) then the packet is dropped. If there is no group connection to that peer being established, the packet is dropped. If this is the first group connection to that group we establish, a peer query packet is sent. This is so we can get the list of peers from the group. 
+
+The peer leave packet is sent to the peer right before killing a group connection. It is only used to tell the other side that the connection is dead if the friend connection is used for other uses than the group chat (another group chat, for a connection to a friend). If not, then the other peer will see the friend connection go offline which will prompt them to stop using it and kill the group connection tied to it.
+
+Peer query packet:
+[uint8_t id 98][uint16_t group number][uint8_t id 8]
+
+Peer response packet:
+[uint8_t id 98][uint16_t group number][uint8_t id 9][Repeated times number of peers: [uint16_t peer num][uint8_t 32bytes real public key][uint8_t 32bytes temp DHT public key][uint8_t name length][name]] 
+
+Title response packet:
+[uint8_t id 98][uint16_t group number][uint8_t id 10][title]
+
+Message packets:
+[uint8_t id 99][uint16_t group number][uint16_t peer number][uint32_t message number][uint8_t with a value representing id of message][data]
+
+Lossy Message packets:
+[uint8_t id 199][uint16_t group number][uint16_t peer number][uint16_t message number][uint8_t with a value representing id of message][data]
+
+If a peer query packet is received, the receiver takes his list of peers and creates a peer response packet which is then sent to the other peer. If there are too many peers in the group chat and the peer response packet would be larger than the maximum size of friend connection packets (1373 bytes), more than one peer response packet is sent back. A Title response packet is also sent back. This is how the peer that joins a group chat finds out the list of peers in the group chat and the title of the group chat right after joining.
+
+Peer response packets are straightforward and contain the information for each peer (peer number, real public key, DHT public key, name) appended to each other. The title response is also straight forward.
+
+Both the maximum length of groupchat peer names and the groupchat title is 128 bytes. This is the same maximum length as names in all of toxcore.
+
+When a peer receives the peer response packet(s), they will add each of the received peers to their groupchat peer list, find the 4 closest peers to them and create groupchat connections to them as was explained previously.
+
+To find their peer number, the peer will find themselves in the list of received peers and use the peer number assigned to them as their own.
+
+Message packets are used to send messages to all peers in the groupchat. To send a message packet, a peer will first take their peer number and the message they want to send. Each message packet sent will have a message number that is equal to the last message number sent + 1. Like all other numbers (group chat number, peer number) in the packet, the message number in the packet will be in big endian format. When a Message packet is received, the peer receiving it will take the message number in the packet and see if it is bigger than the one it has saved for the peer with peer number. If this is the first Message packet being received for this peer then this check is omitted. The message number is used to know if a Message packet was already received and relayed to prevent packets from looping around the groupchat. If the message number check says that the packet was already received, then the packet is discarded. If it was not already received, a Message packet with the message is sent (relayed) to all current group connections (normal groupchat connections + temporary invited groupchat connections) except the one that it was received from. The only thing that should change in the Message packet as it is relayed is the group number.
+
+message ids:
+0 - ping
+sent every ~60 seconds by every peer.
+No data.
+
+16 - new_peer
+Tell everyone about a new peer in the chat.
+[uint16_t peer_num][uint8_t 32bytes real public key][uint8_t 32bytes temp DHT public key]
+
+17 - kill_peer
+[uint16_t peer_num]
+
+48 - name change
+[uint8_t name[namelen]]
+
+49 - groupchat title change
+[uint8_t title[titlelen]]
+
+64 - chat message
+[uint8_t message[messagelen]]
+
+65 - action (/me)
+[uint8_t message[messagelen]]
+
+Ping messages must be sent every 60 seconds by every peer. This is how other peers know that the peers are still alive. 
+
+When a new peer joins, the peer which invited the joining peer will send a new peer message to warn everyone that there is a new peer in the chat. When a new peer message is received, the peer in the packet must be added to the peer list.
+
+Kill peer messages are used to indicate that a peer has quit the group chat. It is sent by the one quitting the group chat right before they quit it.
+
+name change messages are used to change or set the name of the peer sending it. They are also sent by a joining peer right after receiving the list of peers in order to tell others what their name is. 
+
+title change packets are used to change the title of the group chat and can be sent by anyone in the group chat.
+
+Chat and action messages are used by the group chat peers to send messages to others in the group chat.
+
+
+Lossy message packets are used to send audio packets to others in audio group chats. Lossy packets work the same way as normal relayed groupchat messages in that they are relayed to everyone in the group chat until everyone has them. 
+
+Some differences with them though is that first of all the message number is a 2 byte integer. If I were to improve the groupchats protocol I would make the message number for normal message packets 2 bytes. 1 byte means only 256 packets can be received at the same time. With the delays in groupchats and 256 packets corresponding to less than a high quality video frame it would not work. This is why 2 bytes was chosen.
+
+Note that this message number like all other numbers in the packet are in big endian format.
+
+When receiving a lossy packet the peer will first check if it was already received. If it wasn't, the packet will be added to the list of received packets and then the packet will be passed to its handler and then sent to the 2 closest connected groupchat peers that are not the sender. The reason for it to be 2 instead of 4 (well 3 if we are not the original sender) for normal message packets is that it reduces bandwidth usage without lowering the quality of the received audio stream via lossy packets. Message packets also are sent relatively rarely, enough so that changing it to 2 would have a minimal impact in bandwidth usage.
+
+To check if a packet was received, the last up to 65536 received packet numbers are stored, current groups store the last 256 packet numbers however that is because it is currently audio only. If video was added meaning a much higher number of packets would be sent, this number would be increased. If the packet number is in this list then it was received.
+
+This is how groupchats in Tox work.
