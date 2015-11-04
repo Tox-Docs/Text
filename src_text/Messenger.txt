@@ -1,33 +1,31 @@
 Messenger is the module at the top of all the other modules. It sits on top of friend_connection in the hierarchy of toxcore.
 
-Messenger takes care of sending and receiving messages using the connection provided by friend_connection. It is the module that takes the rest of toxcore which provides only a way for friends to connect and makes it usable as a instant messenger. For example Messenger lets users set a nickname, status message which it then transmits to friends when they are online. It also lets users send messages to friends. It basically takes the lower level friend_connection and builds an instant messaging system on top of it.
+Messenger takes care of sending and receiving messages using the connection provided by friend_connection. The module provides a way for friends to connect and makes it usable as an instant messenger. For example, Messenger lets users set a nickname and status message which it then transmits to friends when they are online. It also allows users to send messages to friends and builds an instant messenging system on top of the lower level friend_connection module.
 
-Messenger offers two ways to add a friend. The first way is to add a friend with only their long term public key, this is used when a friend needs to be added but for some reason a friend request should not be sent. The friend should only be added. This is most commonly used to accept friend requests but could also be used in other ways. If two friends add each other using this function they will connect to each other. Adding a friend using this method just adds the friend to friend_connection and creates a new friend entry in Messenger for the friend.
+Messenger offers two methods to add a friend. The first way is to add a friend with only their long term public key, this is used when a friend needs to be added but for some reason a friend request should not be sent. The friend should only be added. This method is most commonly used to accept friend requests but could also be used in other ways. If two friends add each other using this function they will connect to each other. Adding a friend using this method just adds the friend to friend_connection and creates a new friend entry in Messenger for the friend.
 
-The Tox ID is what a Tox peer must give to their friends so that their friends can add them as friends in Tox. The Tox ID of a Tox peer contains the long term public key of the peer (32 bytes) followed by the 4 byte nospam (see: friend_requests) value and a 2 byte XOR checksum. How the Tox ID is sent to others is up to the user and the client. The recommended way is to encode it in hexadecimal and have the user manually send it to the friend using another program.
+The Tox ID is used to identify peers so that they can be added as friends in Tox. In order to add a friend, a Tox user must have the friend's Tox ID.The Tox ID contains the long term public key of the peer (32 bytes) followed by the 4 byte nospam (see: friend_requests) value and a 2 byte XOR checksum. The method of sending the Tox ID to others is up to the user and the client but the recommended way is to encode it in hexadecimal format and have the user manually send it to the friend using another program.
 
 Tox ID:
 [long term public key (32 bytes)][nospam (4 bytes)][checksum (2 bytes)]
 
 The checksum is calculated by XORing the first two bytes of the ID with the next two bytes, then the next two bytes until all the 36 bytes have been XORed together. The result is then appended to the end to form the Tox ID.
 
-The only requirement for safety is that the user must make sure the Tox ID is not intercepted and replaced in transit by a different Tox ID which would mean the friend would connect to a malicious person instead of the user though protecting against that is out of the scope of Tox.
+The user must make sure the Tox ID is not intercepted and replaced in transit by a different Tox ID, which would mean the friend would connect to a malicious person instead of the user, though taking reasonable precautions as this is outside the scope of Tox. Tox assumes that the user has ensured that they are using the correct Tox ID, belonging to the intended person, to add a friend.
 
-Tox assumes that the user has made sure that added friends are added with the correct Tox ID that belongs to the right person.
-
-The second way to add a friend is to add a friend with a Tox ID and a message to be sent in a friend request. This way of adding friends will try to send a friend request with the set message to the peer whos Tox ID that was added. It is the same function as the first one except that a friend request is crafted and sent to the other peer.
+The second method to add a friend is by using their Tox ID and a message to be sent in a friend request. This way of adding friends will try to send a friend request, with the set message, to the peer whose Tox ID was added. The method is similar to the first one, except that a friend request is crafted and sent to the other peer.
 
 When a friend connection associated to a Messenger friend goes online, a ONLINE packet will be sent to them. Friends are only set as online if an ONLINE packet is received.
 
-As soon as a friend goes online, Messenger will forever stop sending friend requests to that friend if it was sending them.
+As soon as a friend goes online, Messenger will stop sending friend requests to that friend, if it was sending them, as they are redundant for this friend.
 
 Friends will be set as offline if either the friend connection associated to them goes offline or if an OFFLINE packet is received from the friend.
 
 Messenger packets are sent to the friend using the online friend connection to the friend.
 
-If Messenger needs to check if any of the non lossy packets in this list have been received by the friend to implement receipts for text messages for example, net_crypto offers such a functionality by taking into note which net_crypto packet numbers were used to send the packets and then checking with net_crypto later if the friend received them (if the bottom of the send array is after the packet number). Note that net_crypto packet numbers could overflow after a long time so the checks should not wait before 2^32 net_crypto packets get sent with that friend connection before checking if it was received.
+Should Messenger need to check whether any of the non lossy packets in the following list were received by the friend, for example to implement receipts for text messages, net_crypto can be used. The net_crypto packet number, used to send the packets, should be noted and then net_crypto checked later to see if the bottom of the send array is after this packet number. If it is, then the friend has received them. Note that net_crypto packet numbers could overflow after a long time, so checks should happen within 2^32 net_crypto packets sent with the same friend connection.
 
-In toxcore Messenger message receipts for action messages and normal text messages are implemented by adding the net_crypto packet number of each message along with the receipt number to the top of a linked list that each friend has as they are sent. Every Messenger loop, the entries are read from the bottom and entries are removed and passed to the client until an entry that refers to a packet not yet received by the other is reached, when this happens it stops.
+Message receipts for action messages and normal text messages are implemented by adding the net_crypto packet number of each message, along with the receipt number, to the top of a linked list that each friend has as they are sent. Every Messenger loop, the entries are read from the bottom and entries are removed and passed to the client until an entry that refers to a packet not yet received by the other is reached, when this happens it stops.
 
 List of Messenger packets:
 
@@ -35,7 +33,7 @@ ONLINE:
 length: 1 byte
 [uint8_t (24)]
 
-Sent to a friend when a connection is established to tell them to show us as online in their friends list. The reason this packet and the OFFLINE packet exist is because friend_connections can be established to non friends if non friends are in a groupchat. Since the fact that an online friend connection to a peer exists does not mean this peer has that peer as a friend. In order to prevent a peer connected to us through a group chat but that isn't a friend from showing as online if we have them as a friend both this packet and the OFFLINE packet are needed.
+Sent to a friend when a connection is established to tell them to mark us as online in their friends list. This packet and the OFFLINE packet are necessary as friend_connections can be established with non-friends who are part of a groupchat. The two packets are used to differentiate between these peers, connected to the user through groupchats, and actual friends who ought to be marked as online in the friendlist.
 
 On receiving this packet, Messenger will show the peer as being online.
 
@@ -69,7 +67,7 @@ TYPING:
 length: 2 bytes
 [uint8_t (51)][uint8_t typing status (0 = not typing, 1 = typing)]
 
-Used to tell a friend if we are currently typing or not.
+Used to tell a friend whether the user is currently typing or not.
 
 MESSAGE:
 [uint8_t (64)][Message as a UTF8 byte string (Min length: 0 bytes, Max length: 1372 bytes)]
@@ -112,61 +110,61 @@ MESSAGE_GROUPCHAT 99
 LOSSY_GROUPCHAT 199
 
 
-File transfers are how files are transferred with Tox.
+Files are transferred in Tox using File transfers.
 
 To initiate a file transfer, the friend creates and sends a FILE_SENDREQUEST packet to the friend it wants to initiate a file transfer to.
 
-The first part of the FILE_SENDREQUEST packet is the file number. The file number is the number of this file transfer. The fact that file number is represented by a 1 byte number means that the maximum amount of concurrent files Tox can send to a friend is 256. 256 file transfers per friend is enough that clients can use tricks like queueing files if there are more files needing to be sent.
+The first part of the FILE_SENDREQUEST packet is the file number. The file number is the number used to identify this file transfer. As the file number is represented by a 1 byte number, the maximum amount of concurrent files Tox can send to a friend is 256. 256 file transfers per friend is enough that clients can use tricks like queueing files if there are more files needing to be sent.
 
-256 outgoing files per friend means that there is a total of 512 file transfers that can happen at the same time if both incoming and outgoing file transfers are counted together.
+256 outgoing files per friend means that there is a maximum of 512 concurrent file transfers, between two users, if both incoming and outgoing file transfers are counted together.
 
-File numbers are used to identify the file transfer meaning that when creating a new outgoing file transfer the Tox instance must make sure to use a file number that isn't used for another outgoing file transfer to that same friend. File numbers are chosen by the file sender and stay unchanged for the entire duration of the file transfer. The file number is used by both FILE_CONTROL and FILE_DATA packets to identify which file transfer these packets are for.
+As file numbers are used to identify the file transfer, the Tox instance must make sure to use a file number that isn't used for another outgoing file transfer to that same friend when creating a new outgoing file transfer. File numbers are chosen by the file sender and stay unchanged for the entire duration of the file transfer. The file number is used by both FILE_CONTROL and FILE_DATA packets to identify which file transfer these packets are for.
 
-The second part of the file transfer request is the file type. This is simply a number that identifies the type of file. for example, tox.h defines the file type 0 as being a normal file and type 1 as being an avatar meaning the Tox client should use that file as an avatar. The file type does not affect in any way how the file is transfered or the behavior of the file transfer. It is set by the Tox client that creates the file transfers and send to the friend untouched.
+The second part of the file transfer request is the file type. This is simply a number that identifies the type of file. for example, tox.h defines the file type 0 as being a normal file and type 1 as being an avatar meaning the Tox client should use that file as an avatar. The file type does not effect in any way how the file is transfered or the behavior of the file transfer. It is set by the Tox client that creates the file transfers and send to the friend untouched.
 
 The file size indicates the total size of the file that will be transfered. A file size of UINT64_MAX (maximum value in a uint64_t) means that the size of the file is undetermined or unknown. For example if someone wanted to use Tox file transfers to stream data they would set the file size to UINT64_MAX. A file size of 0 is valid and behaves exactly like a normal file transfer.
 
-The file id is 32 bytes that can be used to uniquely identify the file transfer. For example avatar transfers use it as the hash of the avatar so that the receiver can check if they already have the avatar for a friend which saves bandwidth. It is also used to identify broken file transfers across toxcore restarts (for more info see the file transfer section of tox.h). The file transfer implementation does not care about what the file id is, as it is only used by things above it.
+The file id is 32 bytes that can be used to uniquely identify the file transfer. For example, avatar transfers use it as the hash of the avatar so that the receiver can check if they already have the avatar for a friend which saves bandwidth. It is also used to identify broken file transfers across toxcore restarts (for more info see the file transfer section of tox.h). The file transfer implementation does not care about what the file id is, as it is only used by things above it.
 
 The last part of the file transfer is the optional file name which is used to tell the receiver the name of the file.
 
-When a FILE_SENDREQUEST packet is received, the implementation validates and sends the info to the Tox client which decides if they should accept the file transfer or not.
+When a FILE_SENDREQUEST packet is received, the implementation validates and sends the info to the Tox client which decides whether they should accept the file transfer or not.
 
 To refuse or cancel a file transfer, they will send a FILE_CONTROL packet with control_type 2 (kill).
 
 FILE_CONTROL packets are used to control the file transfer. FILE_CONTROL packets are used to accept/unpause, pause, kill/cancel and seek file transfers. The control_type parameter denotes what the file control packet does.
 
-The send_receive and file number are used to identify a specific file transfer. Since file numbers for outgoing and incoming files are not related to each other, the send_receive parameter is used to identify if the file number belongs to files being sent or files being received. If send_receive is 0, the file number corresponds to a file being sent by the one sending the file control packet, if it is 1 it means it corresponds to a file being received.
+The send_receive and file number are used to identify a specific file transfer. Since file numbers for outgoing and incoming files are not related to each other, the send_receive parameter is used to identify if the file number belongs to files being sent or files being received. If send_receive is 0, the file number corresponds to a file being sent by the user sending the file control packet. If send_receive is 1, it corresponds to a file being received by the user sending the file control packet.
 
-control_type is what indicates what the FILE_CONTROL packet is for. control_type of 0 means that the FILE_CONTROL packet is used to tell the friend that the file transfer is accepted or that we are unpausing a previously paused (by us) file transfer. control_type of 1 is used to tell the other to pause the file transfer.
+control_type indicates the purpose of the FILE_CONTROL packet. control_type of 0 means that the FILE_CONTROL packet is used to tell the friend that the file transfer is accepted or that we are unpausing a previously paused (by us) file transfer. control_type of 1 is used to tell the other to pause the file transfer.
 
-Pausing file transfers works in a way that if one side pauses the transfer, that side must be the one to unpause it. If both sides pause a file transfer, both sides must unpause it before the file can be resumed. If the sender pauses the file transfer for example, the receiver must not be able to unpause it. To unpause a file transfer, control_type 0 is used. files can only be paused when they are in progress and have been accepted.
+If one party pauses a file transfer, that party must be the one to unpause it. Should both sides pause a file transfer, both sides must unpause it before the file can be resumed. For example, if the sender pauses the file transfer, the receiver must not be able to unpause it. To unpause a file transfer, control_type 0 is used. files can only be paused when they are in progress and have been accepted.
 
-control_type 2 is used to kill, cancel or refuse a file transfer. When a FILE_CONTROL is received, the targeted file transfer is considered dead and will immediately be wiped, the file number can then be reused. The peer sending the FILE_CONTROL must also wipe the targeted file transfer from their side. This control type can be used by both sides of the transfer at any time.
+control_type 2 is used to kill, cancel or refuse a file transfer. When a FILE_CONTROL is received, the targeted file transfer is considered dead, will immediately be wiped and its file number can be reused. The peer sending the FILE_CONTROL must also wipe the targeted file transfer from their side. This control type can be used by both sides of the transfer at any time.
 
-control_type 3, the seek control type is used to tell the sender of the file to start sending from a different index in the file than 0. It can only be used right after receiving a FILE_SENDREQUEST packet and before accepting the file by sending a FILE_CONTROL with control_type 0. When this control_type is used, an extra 8 byte number in big endian format is appended to the FILE_CONTROL that is not present with other control types. This number indicates the index in bytes from the beginning of the file at which the file sender should start sending the file. The goal of this control type is so files can be resumed across core restarts. Tox clients can know if they have received a part of a file by using the file id and then used this packet to tell the other side to start sending from the last received byte. If the seek position is bigger or equal to the size of the file, the seek packet is invalid and the one receiving it will discard it.
+control_type 3, the seek control type is used to tell the sender of the file to start sending from a different index in the file than 0. It can only be used right after receiving a FILE_SENDREQUEST packet and before accepting the file by sending a FILE_CONTROL with control_type 0. When this control_type is used, an extra 8 byte number in big endian format is appended to the FILE_CONTROL that is not present with other control types. This number indicates the index in bytes from the beginning of the file at which the file sender should start sending the file. The goal of this control type is to ensure that files can be resumed across core restarts. Tox clients can know if they have received a part of a file by using the file id and then using this packet to tell the other side to start sending from the last received byte. If the seek position is bigger or equal to the size of the file, the seek packet is invalid and the one receiving it will discard it.
 
-To accept a file Tox will therefore optionally send a seek packet if it is needed and then send a FILE_CONTROL packet with control_type 0 (accept) to tell the file sender that the file was accepted. 
+To accept a file Tox will therefore send a seek packet, if it is needed, and then send a FILE_CONTROL packet with control_type 0 (accept) to tell the file sender that the file was accepted. 
 
 Once the file transfer is accepted, the file sender will start sending file data in sequential chunks from the beginning of the file (or the position from the FILE_CONTROL seek packet if one was received).
 
-File data is sent using FILE_DATA packets. The file number corresponds to the file transfer that the file chunks belong to. The receiver assumes that the file transfer is over as soon as a chunk with the file data size not equal to the maximum size (1371 bytes) is received (In file transfers where the size of the file is unknown (set to UINT64_MAX), this is how the sender tells the receiver that the file transfer is done). The receiver also assumes that if the amount of received data equals to the file size received in the FILE_SENDREQUEST, the file sending is finished and has been successfully received. Right after this occurs, the receiver cleans up and forgets about the file number and frees it up so that a new incoming file transfer can use that file number. The implementation should discard any extra data received that adds up to larger than the file size received at the beginning.
+File data is sent using FILE_DATA packets. The file number corresponds to the file transfer that the file chunks belong to. The receiver assumes that the file transfer is over as soon as a chunk with the file data size not equal to the maximum size (1371 bytes) is received. This is how the sender tells the receiver that the file transfer is complete in file transfers where the size of the file is unknown (set to UINT64_MAX). The receiver also assumes that if the amount of received data equals to the file size received in the FILE_SENDREQUEST, the file sending is finished and has been successfully received. Immediately after this occurs, the receiver frees up the file number so that a new incoming file transfer can use that file number. The implementation should discard any extra data received which is larger than the file size received at the beginning.
 
 In 0 filesize file transfers, the sender will send one FILE_DATA packet with a file data size of 0.
 
-The sender will know if the receiver has received the file successfully by checking if the friend has received the last FILE_DATA sent that contained the last chunk of the file. Net_crypto has the functionality where one sending packets though it can check later if they were received by storing the packet number and checking later if net_crypto says it was received or not. As soon as net_crypto says the other received the packet, the file transfer is considered successful and wiped, the file number can then be reused to send new files.
+The sender will know if the receiver has received the file successfully by checking if the friend has received the last FILE_DATA packet sent (containing the last chunk of the file). Net_crypto can be used to check whether packets sent through it have been received by storing the packet number of the sent packet and verifying later in net_crypto to see whether it was received or not. As soon as net_crypto says the other received the packet, the file transfer is considered successful, wiped and the file number can be reused to send new files.
 
 FILE_DATA packets should be sent as fast as the net_crypto connection can handle it respecting its congestion control.
 
-If the friend goes offline, all file transfers are cleared in toxcore. This makes it more simple for toxcore because it does not have to deal with resuming file transfers. It also makes it more simple for clients because the way to resume file transfers doesn't have to change if the client is restarted or if toxcore simply loses the connection to the friend because of a bad internet connection.
+If the friend goes offline, all file transfers are cleared in toxcore. This makes it simpler for toxcore as it does not have to deal with resuming file transfers. It also makes it simpler for clients as the method for resuming file transfers remains the same, even if the client is restarted or toxcore loses the connection to the friend because of a bad internet connection.
 
-Messenger also takes care of saving the friends list and other friend info so that it's possible to close and start toxcore while keeping all your friends, your long term key and information necessary to reconnect to the network. 
+Messenger also takes care of saving the friends list and other friend information so that it's possible to close and start toxcore while keeping all your friends, your long term key and the information necessary to reconnect to the network. 
 
-Important things stored are: The long term private key, our current nospam, our friends public keys and any friend requests if we are currently sending them to that friend. To reconnect back to the network DHT nodes, TCP relays and some onion nodes are stored.
+Important information messenger stores includes: the long term private key, our current nospam value, our friends' public keys and any friend requests the user is currently sending. The network DHT nodes, TCP relays and some onion nodes are stored to aid reconnection.
 
-A lot of other things like names of friends, current name, status message of friends, our status message, etc... can be stored. The exact format of the toxcore save is explained later.
+In addition to this, a lot of optional data can be stored such as the usernames of friends, our current username, status messages of friends, our status message, etc... can be stored. The exact format of the toxcore save is explained later.
 
-in toxcore Messenger is also where the TCP server is run from if the client has enabled it. TCP server is usually run independently as part of the bootstrap node package but can be enabled in clients. If it is enabled in toxcore Messenger will add the TCP server being run to the TCP relay.
+The TCP server is run from the toxcore messenger module if the client has enabled it. TCP server is usually run independently as part of the bootstrap node package but it can be enabled in clients. If it is enabled in toxcore, Messenger will add the running TCP server to the TCP relay.
 
 Messenger is the module that transforms code that can connect to friends based on public key into a real instant messenger.
 
