@@ -1,8 +1,8 @@
 The DHT is a self-organizing swarm of all peers in the Tox network. This module takes care of finding the ip & port of peers and establishing a route to them directly via UDP using hole punching if necessary. The DHT only runs on UDP and so is only used if UDP works.
 
-Every peer in the Tox DHT has a temporary public key. This DHT public key acts as it's address. This address is temporary and is renewed every time the tox instance is closed or restarted. The DHT public key of a friend is found using the onion module. Once the DHT public key of a friend is known, the DHT is used to find them and connect directly to them via UDP.
+Every peer in the Tox DHT has a temporary public key. This DHT public key acts as its address. This address is temporary and is renewed every time the tox instance is closed or restarted. The DHT public key of a friend is found using the onion module. Once the DHT public key of a friend is known, the DHT is used to find them and connect directly to them via UDP.
 
-Self-organizing in the DHT occurs through each HDT peer connecting to an arbitrary number of peers closest to their own DHT public key. In the toxcore implementation, 32 is the number of peers chosen for this number.
+Self-organizing in the DHT occurs through each DHT peer connecting to an arbitrary number of peers closest to their own DHT public key. In the toxcore implementation, 32 is the number of peers chosen for this number.
 
 DHT closeness is defined by a distance function, defined as the XOR between the 2 DHT public keys, both as 32 byte numbers in big endian format. A DHT peer with public key 1 would be closer to one with public key 0 than one with public key 5 for example because: 1 XOR 0 = 1 and 1 XOR 5 = 4. The smaller this distance, the closer the peers are said to be. Since 1 is smaller it means 1 is closer to 0 than to 5.
 
