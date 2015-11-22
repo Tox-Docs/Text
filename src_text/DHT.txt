@@ -24,10 +24,7 @@ DHT Packet:
 |   Private DHT key of the SENDER,  |
 |   Public DHT key of the RECIVER]  |
 | data/payload             (varies) |
-| ping_id                 (8 bytes) |
 +-----------------------------------+
-
-Every request must have a ping_id. The ping_id = an 8 byte number, the response must contain the exact same number as the request.
 
 The following packets use this format.
 
