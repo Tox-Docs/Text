@@ -1,53 +1,94 @@
-The DHT module takes care of finding the ip/port of peers and establishing a route to them directly with UDP using hole punching if necessary. The DHT only runs on UDP and so is only used if UDP works. 
+The DHT is a self-organizing swarm of all peers in the Tox network. This module takes care of finding the ip & port of peers and establishing a route to them directly via UDP using hole punching if necessary. The DHT only runs on UDP and so is only used if UDP works.
 
-Every peer in the Tox DHT has an address which is a public key called the temporary DHT public key. This address is temporary and is wiped every time the tox instance is closed/restarted. The DHT public key of a friend is found using the onion module. Once the DHT public key of a friend is known, the DHT is used to find them and connect directly to them via UDP.
+Every peer in the Tox DHT has a temporary public key. This DHT public key acts as its address. This address is temporary and is renewed every time the tox instance is closed or restarted. The DHT public key of a friend is found using the onion module. Once the DHT public key of a friend is known, the DHT is used to find them and connect directly to them via UDP.
 
-The DHT is a self-organizing swarm of all peers in the Tox network which uses the UDP protocol. Self-organizing occurs through each peer in the DHT connecting to the X number of peers, 32 in the toxcore implementation, closest to their own DHT public key. This closeness is defined by a distance function. The distance between 2 peers can be defined as the XOR between the 2 DHT public keys which are 32 byte numbers in big endian format. The smaller this distance, the closer the peers are said to be.
+Self-organizing in the DHT occurs through each DHT peer connecting to an arbitrary number of peers closest to their own DHT public key. In the toxcore implementation, 32 is the number of peers chosen for this number.
 
-A DHT peer with public key 1 would be closer to one with public key 0 than one with public key 5 for example because: 1 XOR 0 = 1 and 1 XOR 5 = 4. Since 1 is smaller it means 1 is closer to 0 than to 5.
+DHT closeness is defined by a distance function, defined as the XOR between the 2 DHT public keys, both as 32 byte numbers in big endian format. A DHT peer with public key 1 would be closer to one with public key 0 than one with public key 5 for example because: 1 XOR 0 = 1 and 1 XOR 5 = 4. The smaller this distance, the closer the peers are said to be. Since 1 is smaller it means 1 is closer to 0 than to 5.
 
-If each peer in the network knows the peers with the DHT public key closest to its DHT public key, then to find a specific peer with public key X a peer just needs to recursively ask peers in the DHT for known peers that have the DHT public keys closest to X. Eventually the peer will find the peers in the DHT that are the closest to that peer and, if that peer is online, they will find them.
+If each peer in the network knows the peers with the DHT public key closest to its DHT public key, then to find a specific peer with public key X a peer just needs to recursively ask peers in the DHT for known peers that have the DHT public keys closest to X.
+Eventually the peer will find the peers in the DHT that are the closest to that peer and, if that peer is online, they will find them.
+
+
+The DHT wraps all of it's data inside a standard Packet type.
+
+DHT Packet:
++-----------------------------------+
+| Unencrypted Section:              |
+| Packet type             (1 byte ) |
+| Sender DHT Public Key  (32 bytes) |
+| Random nonce           (24 bytes) |
++-----------------------------------+
+| Encrypted Payload:                |
+|   [Encrypted with the nonce,      |
+|   Private DHT key of the SENDER,  |
+|   Public DHT key of the RECIVER]  |
+| data/payload             (varies) |
++-----------------------------------+
+
+The following packets use this format.
+
+Ping Packet (Request and response):
+Packet type 00 for request, 01 for response.
++-----------------------------------+
+| Encrypted payload:                |
+| Ping type               (1 byte ) |
+| ping_id                 (8 bytes) |
++-----------------------------------+
+
+The main DHT packet types are ping requests and responses which are used to check if another node is alive and get node packets which are used to query another DHT node for the up to 4 nodes they know that are the closest to the requested node.
+
+The first byte of a ping request is a 0, followed by the DHT public key of the sender and the nonce. The encrypted payload contains a byte with a value of 00 for a ping request, and 01 for a ping reply, followed by a 8 byte ping_id which must be the same in the request and reply.
+
+The reason for the 1 byte value in the encrypted part is because the key used to encrypt both the request and response will be the same, due to how the encryption works this prevents a possible attacker from being able to create a ping response without needing to decrypt the ping request.
+
+The ping_id is used to make sure that the response received later is a response for this ping and not a replayed response from a previous ping, (without a ping_id an attacker would be able to make the sender believe that the node they are pinging is still up by just sending a generic ping response packet without investing decryption time/cycles.) Requiring the ping_id also requires the ping reply to follow a ping request.
+
+The ping response follows the standard DHT packet. For a ping reply, the packet type is 01. The encrypted payload contains a single byte with a value of 01, followed by the 8 byte ping_id that was sent in the ping request. All ping requests received will be decrypted. If successfully decrypted a reply will be created and sent.
+
+
+Get Nodes (Request)   Packet type 02:
++-----------------------------------+
+| Encrypted payload:                |
+| DHT PUBKEY             (32 bytes) |
+| ping_id                ( 8 bytes) |
++-----------------------------------+
+
+Send Nodes (Response) Packet type 04:
++-----------------------------------+
+| Encrypted payload:                |
+| Number of packed nodes ( 1 byte ) |
+| Nodes in packed format (max of 4) |
+|      (39 bytes for IPv4) * number |
+|      (41 bytes for IPv6) * number |
+| ping_id                ( 8 bytes) |
++-----------------------------------+
+
+Get Nodes and Send Nodes both follow use the DHT packet with the first byte of a get nodes request value of 02, and send nodes response value of 04.
+
+The encrypted payload of the request is the DHT public key that the sender is searching for, or wants to find the nodes in the DHT closest to it. This is followed by an 8 byte ping id which is there for the same reason as the one for the ping request.
+
+The encrypted payload of the response starts with the number of nodes in the response, followed by that number of nodes in a packed node format, (max of 4 nodes). Send node responses should contain the 4 closest good (not timed out) nodes that the node has in their list of known nodes. Finally the same ping_id received in the request.
+
 
 Packed node format:
-[uint8_t ip_type (2 == IPv4, 10 == IPv6, 130 == TCP IPv4, 138 == TCP IPv6. First bit = protocol (0 is UDP, 1 is TCP), 3 bits = nothing, 4 bits = address family))][ip (in network byte order), length=4 bytes if ipv4, 16 bytes if ipv6][port (in network byte order), length=2 bytes][char array (node_id), length=32 bytes]
 
-The packed node format is a way to store the node info in a small yet easy to parse format. To store more than one node, simply append another one to the previous one: [packed node 1][packed node 2]...
+Packed node format:
++-----------------------------------+
+| ip_type                ( 1 byte ) | First bit is protocol, 3 bits = 0, 4th bit = address family.
+|                                   | (2 == UDP IPv4, 10 == UDP IPv6, 130 == TCP IPv4, 138 == TCP IPv6.)
+| IPv4 Address           ( 4 bytes) | In network byte order, length = 4  bytes if IPv4.
+|  -OR-                     -OR-    |  -OR- (Only one type should be used, and should match the ip_type!)
+| IPv6 Address           (16 bytes) | In network byte order, length = 16 bytes if IPv6.
+| Port                   ( 2 bytes) | In network byte order.
+| Node ID                (32 bytes) |
++-----------------------------------+
 
-The packed node format is used in many places in Tox. ip_type numbers 2 and 10 are used to indicate an ipv4 or ipv6 UDP node. The number 130 is used for an ipv4 TCP relay and 138 is used to indicate an ipv6 TCP relay. The reason for these numbers is because the numbers on my Linux machine for ipv4 and ipv6 (the AF_INET and AF_INET6 defines) were 2 and 10. The TCP numbers are just the UDP numbers + 128. The ip is 4 bytes for a ipv4 address (ip_type numbers 2 and 130). The ip is 16 bytes for an ipv6 address (ip_type numbers 10 and 138). This is followed by 32 byte the public key of the node.
+The DHT Send nodes uses the Packed Node Format. The packed node format is a way to store the node info in a small yet easy to parse format. The packed node format is used in many places in Tox. To store more than one node, simply append another one to the previous one: [packed node 1][packed node 2][...]
+
+In the Packed Node Format, ip_type numbers 2 and 10 are used to indicate an ipv4 or ipv6 UDP node. The number 130 is used for an ipv4 TCP relay and 138 is used to indicate an ipv6 TCP relay. The reason for these numbers is because the numbers on my Linux machine for ipv4 and ipv6 (the AF_INET and AF_INET6 defines) were 2 and 10. The TCP numbers are just the UDP numbers + 128. The ip is 4 bytes for a ipv4 address (ip_type numbers 2 and 130). The ip is 16 bytes for an ipv6 address (ip_type numbers 10 and 138). This is followed by 32 byte the public key of the node.
 
 Only the UDP ip_types (ip_type 2 and ip_type 10) are used in the DHT module when sending nodes with the packed node format. This is because the TCP ip_types are used to send TCP relay information and the DHT is UDP only.
-
-
-Ping(Request and response): 
-
-[byte with value: 00 for request, 01 for response][DHT public key of sender, length=32 bytes][random 24 byte nonce][Encrypted with the nonce, private DHT key of the sender and public DHT key of the receiver: [1 byte type (0 for request, 1 for response)][8 byte (ping_id)]]
-
-ping_id = an 8 byte number, the response must contain the exact same number as the request.
-
-The main DHT packet types are ping requests and responses which are used to check if another node is alive and get node packets which are used to query another DHT node for the up to 4 nodes they know that are the closest to the requested node .
-
-The first byte of a ping request is a 0. This is then followed by the DHT public key of the sender and a nonce. The encrypted part contains a byte with the value 0 followed by a 8 byte ping ip which will be sent back in the response. The reason for the 1 byte value in the encrypted part is because the key used to encrypt both the request and response will be the same due to how the encryption works it prevents a possible attacked from being able to create a ping response without needing to decrypt the ping request. The ping id is used to make sure that the response received later is a response for this ping and not a replayed response from a previous ping which would have allowed an attacker to make the ping sender believe that the node they are pinging is still up. The ping_id is also used so that a node can't just send ping response packets to the node in order to make the DHT module implementation reset its timeout, it makes sure the node has to actually receive the request packet before sending a response.
-
-
-The first byte of a ping response is a 1. This is then followed by the DHT public key of the one sending the response and a random nonce. The encrypted part contains a byte with the value 1 followed by a 8 byte ping id that was sent in the ping response.
-
-All ping requests received will be decrypted. If successfully decrypted a response will be created then sent back to the same node.
-
-Get nodes (Request):
-Packet contents: 
-[byte with value: 02][DHT public key of sender, length=32 bytes][random 24 byte nonce][Encrypted with the nonce, DHT private key of the sender and public DHT key of the receiver :[requested_node public key (DHT public key of node of which we want to find), length=32 bytes][ping_id (must be sent back unmodified by in the response), length=8 bytes]]
-
-Valid replies: a send_nodes packet
-
-The first byte of a get node request is a 2. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the request is the DHT key that the sender is searching for or wants to find the nodes in the DHT closest to it. This is followed by an 8 byte ping id which is there for the same reason as the one for the ping request. 
-
-Get node requests are responded to by send node responses. Send node responses should contain the 4 closest good (not timed out) nodes that the node receiving the get node has in their list of known nodes.
-
-Send_nodes (response): 
-
-[byte with value: 04][DHT public key of sender, length=32 bytes][random 24 byte nonce][Encrypted with the nonce and private key of the sender:[uint8_t number of nodes in this packet][Nodes in packed node format, length = (39 bytes for ipv4, 41 bytes for ipv6) * (number of nodes (maximum of 4 nodes)) bytes][ping_id, length=8 bytes]]
-
-The first byte of a send node response is a 4. This is then followed by the DHT public key of the sender and a nonce. Inside the encrypted part of the response there is a 1 byte number which contains the number of nodes stored in the packet, up to 4 nodes in packed node format and the 8 byte ping id that was sent in the request.
 
 
 Toxcore stores the 32 nodes closest to its DHT public key and 8 nodes closest to each of the public keys in its DHT friends list (or list of DHT public keys that it actively tries to find and connect to) and pings them every 60 seconds to see if they are alive. Nodes can be in more than one list for example if the DHT public key of the peer is very close to the DHT public key of a friend being searched. It also sends get node requests to a random node (random makes it unpredictable, predictability or knowing which node a node will ping next could make some attacks that disrupt the network more easy as it adds a possible attack vector) in each of these lists of nodes every 20 seconds, with the search public key being its public key for the closest node and the public key being searched for being the ones in the DHT friends list. Nodes are removed after 122 seconds of no response. Nodes are added to the lists after a valid ping response or send node packet is received from them. If the node is already present in the list it is updated if the ip address changed. A node can only be added to a list if the list is not full or if the nodes DHT public key is closer than the DHT public key of at least one of the nodes in the list to the public key being searched with that list. When a node is added to a full list, it will replace the furthest node.
@@ -79,7 +120,7 @@ NAT ping packets (This sits inside the DHT request packet):
 [uint8_t with a value of 254][char with 0][8 byte random number]
 [uint8_t with a value of 254][char with 1][8 byte random number (The same that was sent in the request)]
 
-NAT ping packets are used to see if a friend we are not connected to directly is online and ready to do the hole punching. 
+NAT ping packets are used to see if a friend we are not connected to directly is online and ready to do the hole punching.
 
 Hole punching:
 
@@ -104,7 +145,7 @@ Receiving a NAT ping response therefore means that the friend is both online and
 
 NAT ping requests are sent every 3 seconds in toxcore, if no response is received for 6 seconds, the hole punching will stop. Sending them in longer intervals might increase the possibility of the other node going offline and ping packets sent in the hole punching being sent to a dead peer but decrease bandwidth usage. Decreasing the intervals will have the opposite effect.
 
-There are 2 cases that toxcore handles for the hole punching. The first case is if each 4+ peers returned the same ip and port. The second is if the 4+ peers returned same ips but different ports. 
+There are 2 cases that toxcore handles for the hole punching. The first case is if each 4+ peers returned the same ip and port. The second is if the 4+ peers returned same ips but different ports.
 
 A third case that may occur is the peers returning different ips and ports. This can only happen if the friend is behind a very restrictive NAT that cannot be hole punched or if the peer recently connected to another internet connection and some peers still have the old one stored. Since there is nothing we can do for the first option it is recommended to just use the most common ip returned by the peers and to ignore the other ip/ports.
 
